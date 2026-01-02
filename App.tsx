@@ -19,7 +19,6 @@ const safeInt = (key: string, fallback: number) => {
   return val ? parseInt(val, 10) : fallback;
 };
 
-// רכיב אייקון מטבע זהב איכותי
 const GoldCoin = ({ size = 24 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="inline-block align-middle">
     <circle cx="12" cy="12" r="10" fill="#FBBF24" stroke="#B45309" strokeWidth="2"/>
@@ -37,6 +36,7 @@ function App() {
   const [unlockNotification, setUnlockNotification] = useState<Achievement | null>(null);
   const [maxLevelReached, setMaxLevelReached] = useState(() => safeInt('maxLevel', 1));
   const [selectedSugia, setSelectedSugia] = useState<Sugia | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
   
   const [inventory, setInventory] = useState(() => ({
     bombs: safeInt('bombs', 1),
@@ -49,6 +49,7 @@ function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<GameEngine | null>(null);
   const animationFrameId = useRef<number>(0);
+  const lastTimeRef = useRef<number>(0);
   
   const [stats, setStats] = useState<GameStats>({
     score: 0, level: 1, lives: 3, combo: 0, coins: 0, bombs: 0, shields: 0, potions: 0,
@@ -66,9 +67,9 @@ function App() {
   const [playerName, setPlayerName] = useState('');
   const [playerClass, setPlayerClass] = useState('');
 
-  // אתחול מוזיקת תפריט בטעינה ראשונה
   useEffect(() => {
     Sound.init();
+    setIsMobile(/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
     if (gameState === 'MENU') {
       Sound.startMusic('menu');
     }
@@ -114,9 +115,12 @@ function App() {
     });
   }, []);
 
-  const gameLoop = useCallback(() => {
+  const gameLoop = useCallback((time: number) => {
     if (engineRef.current) {
-        engineRef.current.update();
+        const deltaTime = lastTimeRef.current ? (time - lastTimeRef.current) / (1000 / 60) : 1;
+        lastTimeRef.current = time;
+        
+        engineRef.current.update(Math.min(deltaTime, 2.0)); 
         engineRef.current.draw();
         animationFrameId.current = requestAnimationFrame(gameLoop);
     }
@@ -125,6 +129,7 @@ function App() {
   const startGame = (sugia?: Sugia) => {
     if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
     engineRef.current = null;
+    lastTimeRef.current = 0;
     setDisplayScore(0);
     setStats({
         score: 0, level: sugia ? sugia.requiredLevel : 1, lives: 3, combo: 0, coins: 0, 
@@ -139,7 +144,7 @@ function App() {
     setGameState('PLAYING');
     setIsPaused(false);
     
-    requestAnimationFrame(() => {
+    requestAnimationFrame((time) => {
         if(canvasRef.current) {
             canvasRef.current.width = window.innerWidth;
             canvasRef.current.height = window.innerHeight;
@@ -183,7 +188,8 @@ function App() {
                     }
                 }
             );
-            gameLoop();
+            lastTimeRef.current = time;
+            animationFrameId.current = requestAnimationFrame(gameLoop);
         }
     });
   };
@@ -208,10 +214,13 @@ function App() {
           const x = e.touches ? e.touches[0].clientX : e.clientX;
           const y = e.touches ? e.touches[0].clientY : e.clientY;
           engineRef.current.setPlayerPos(x, y);
+          if (e.touches) e.preventDefault();
       };
       const handleInput = (e: any) => { 
           if(!engineRef.current || e.target.closest('button') || isPaused || gameState !== 'PLAYING') return; 
-          engineRef.current.fire(); 
+          if (!isMobile) {
+            engineRef.current.fire(); 
+          }
       };
       const handleKey = (e: KeyboardEvent) => {
           if (e.target instanceof HTMLInputElement) return;
@@ -224,23 +233,21 @@ function App() {
           if(e.code === 'KeyA') engineRef.current.useBomb();
           if(e.code === 'KeyS') engineRef.current.useShield();
           if(e.code === 'KeyD') engineRef.current.usePotion();
-          if(e.code === 'Space') engineRef.current.useBomb();
+          if(e.code === 'Space') engineRef.current.fire();
       };
       window.addEventListener('resize', handleResize);
       window.addEventListener('mousemove', handleMove);
       window.addEventListener('touchmove', handleMove, {passive: false});
       window.addEventListener('mousedown', handleInput);
-      window.addEventListener('touchstart', handleInput, {passive: true});
       window.addEventListener('keydown', handleKey);
       return () => {
           window.removeEventListener('resize', handleResize);
           window.removeEventListener('mousemove', handleMove);
           window.removeEventListener('touchmove', handleMove);
           window.removeEventListener('mousedown', handleInput);
-          window.removeEventListener('touchstart', handleInput);
           window.removeEventListener('keydown', handleKey);
       };
-  }, [gameLoop, isPaused, gameState]);
+  }, [gameLoop, isPaused, gameState, isMobile]);
 
   const buyItem = (item: ShopItem) => {
     if (item.requiredAchievement && !unlockedAchievements.includes(item.requiredAchievement)) {
@@ -281,7 +288,7 @@ const equipSkin = (id: string) => {
       <h3 className="font-bold mb-2 text-white border-b border-slate-700/50 pb-1">מקשי המשחק:</h3>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2 text-right">
         <div className="flex justify-between gap-4"><span>תנועה:</span> <span className="text-amber-400 font-bold">עכבר / מגע</span></div>
-        <div className="flex justify-between gap-4"><span>ירי:</span> <span className="text-amber-400 font-bold">קליק / לחיצה</span></div>
+        <div className="flex justify-between gap-4"><span>ירי:</span> <span className="text-amber-400 font-bold">{isMobile ? "כפתור 🔥" : "קליק / רווח"}</span></div>
         <div className="flex justify-between gap-4"><span>פצצה:</span> <span className="text-amber-400 font-bold">A</span></div>
         <div className="flex justify-between gap-4"><span>מגן:</span> <span className="text-amber-400 font-bold">S</span></div>
         <div className="flex justify-between gap-4"><span>שיקוי זמן:</span> <span className="text-amber-400 font-bold">D</span></div>
@@ -291,7 +298,7 @@ const equipSkin = (id: string) => {
   );
 
   return (
-    <div className="relative w-full h-screen bg-slate-950 text-white overflow-hidden select-none font-rubik" dir="rtl">
+    <div className="relative w-full h-screen bg-slate-950 text-white overflow-hidden select-none font-rubik" dir="rtl" style={{ touchAction: 'none' }}>
       <canvas ref={canvasRef} className="block w-full h-full" />
       
       {unlockNotification && (
@@ -346,10 +353,20 @@ const equipSkin = (id: string) => {
                     <AbilityButton icon="⏳" count={stats.potions} color="purple" onClick={() => engineRef.current?.usePotion()} label="זמן" shortcut="D" />
                 </div>
                 
-                <button onClick={() => { if (engineRef.current) { const paused = engineRef.current.togglePause(); setIsPaused(paused); Sound.play('ui_click'); } }}
-                   className="md:hidden pointer-events-auto w-14 h-14 bg-slate-800/80 rounded-full flex items-center justify-center text-2xl border border-slate-600 active:scale-90">
-                   ⏸️
-                </button>
+                <div className="flex flex-col gap-4 items-center pointer-events-auto">
+                    {isMobile && (
+                      <button 
+                        onPointerDown={(e) => { e.preventDefault(); engineRef.current?.fire(); }}
+                        className="w-20 h-20 bg-red-600/30 rounded-full border-4 border-white/30 flex items-center justify-center text-4xl shadow-2xl active:scale-90 active:bg-red-600/50 backdrop-blur-sm"
+                      >
+                        🔥
+                      </button>
+                    )}
+                    <button onClick={() => { if (engineRef.current) { const paused = engineRef.current.togglePause(); setIsPaused(paused); Sound.play('ui_click'); } }}
+                       className="pointer-events-auto w-14 h-14 bg-slate-800/80 rounded-full flex items-center justify-center text-2xl border border-slate-600 active:scale-90">
+                       ⏸️
+                    </button>
+                </div>
             </div>
 
             {isPaused && (
@@ -398,6 +415,7 @@ const equipSkin = (id: string) => {
                             value={config.category} onChange={e => { setConfig({...config, category: e.target.value as any}); Sound.play('ui_click'); }}>
                               <option value="common">📖 מילים נפוצות</option>
                               <option value="berachot">🍷 מסכת ברכות</option>
+                              <option value="bava_kamma">⚖️ מסכת בבא קמא</option>
                           </select>
                         </div>
                       </div>

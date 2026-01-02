@@ -5,7 +5,7 @@ import { Sound } from '../utils/sound';
 
 export interface GameConfig {
   difficulty: 'easy' | 'medium' | 'hard';
-  category: 'common' | 'berachot';
+  category: 'common' | 'berachot' | 'bava_kamma';
   skin: string;
   location?: string;
   modifier?: SugiaModifier;
@@ -23,8 +23,8 @@ class Particle {
         this.decay = Math.random() * 0.04 + 0.02;
         this.active = true;
     }
-    update() {
-        this.x += this.vx; this.y += this.vy; this.alpha -= this.decay;
+    update(dt: number) {
+        this.x += this.vx * dt; this.y += this.vy * dt; this.alpha -= this.decay * dt;
         if (this.alpha <= 0) this.active = false;
     }
 }
@@ -35,7 +35,7 @@ class PoolableProjectile {
 
 class PoolableEnemy {
     x = 0; y = 0; text = ''; isCorrect = false; radius = 35; speed = 0; rotation = 0; rotationSpeed = 0; active = false;
-    baseX = 0; waveOffset = 0; jitterX = 0; jitterY = 0;
+    baseX = 0; waveOffset = 0;
 }
 
 export class GameEngine {
@@ -109,9 +109,12 @@ export class GameEngine {
 
     const isMobile = this.width < 600;
     this.player = { x: this.width / 2, y: this.height - (isMobile ? 180 : 150), width: 24, height: 24, isHit: false };
-    this.activeDictionary = config.category === 'common' 
-        ? DICTIONARY.filter(w => w.cat === 'common') 
-        : DICTIONARY.filter(w => w.cat === 'berachot');
+    
+    // סינון דינמי של המילון לפי הקטגוריה שנבחרה
+    this.activeDictionary = DICTIONARY.filter(w => w.cat === config.category);
+    // אם המילון ריק מסיבה כלשהי, נשתמש בכל המילים
+    if (this.activeDictionary.length === 0) this.activeDictionary = [...DICTIONARY];
+    
     this.currentDeck = [...this.activeDictionary];
 
     this.initParallax();
@@ -150,12 +153,12 @@ export class GameEngine {
     });
   }
 
-  updateParallax() {
+  updateParallax(dt: number) {
       for (let i = 0; i < this.starLayers.length; i++) {
           const layer = this.starLayers[i];
           for (let j = 0; j < layer.length; j++) {
               const star = layer[j];
-              star.y += star.speed * (this.boss ? 1.7 : 1) * (this.timeSlowTimer > 0 ? 0.3 : 1);
+              star.y += star.speed * (this.boss ? 1.7 : 1) * (this.timeSlowTimer > 0 ? 0.3 : 1) * dt;
               if (star.y > this.height) { star.y = -10; star.x = Math.random() * this.width; }
           }
       }
@@ -223,46 +226,46 @@ export class GameEngine {
 
   triggerShake(intensity: number) { this.shakeAmount = intensity; }
 
-  update() {
+  update(dt: number = 1.0) {
     if (this.isPaused) return;
-    this.gameFrame++;
-    if (this.shakeAmount > 0.1) this.shakeAmount *= 0.88; else this.shakeAmount = 0;
+    this.gameFrame += dt;
+    if (this.shakeAmount > 0.1) this.shakeAmount *= Math.pow(0.88, dt); else this.shakeAmount = 0;
 
-    this.updateParallax();
+    this.updateParallax(dt);
 
     if (this.playerExploding) {
-        this.explosionTimer--;
+        this.explosionTimer -= dt;
         if (this.explosionTimer <= 0) this.onGameOver(this.score);
     } else {
-        if (Math.random() < 0.003) this.spawnBonus();
+        if (Math.random() < 0.003 * dt) this.spawnBonus();
         
         if (this.config.modifier === 'drift' || this.config.modifier === 'storm') {
-          this.player.x += Math.sin(this.gameFrame * 0.03) * 1.5;
+          this.player.x += Math.sin(this.gameFrame * 0.03) * 1.5 * dt;
         }
 
-        if ((this.config.modifier === 'hazards' || this.config.modifier === 'storm' || this.config.modifier === 'final') && Math.random() < 0.015) this.spawnHazard();
+        if ((this.config.modifier === 'hazards' || this.config.modifier === 'storm' || this.config.modifier === 'final') && Math.random() < 0.015 * dt) this.spawnHazard();
         
-        if (this.timeSlowTimer > 0) this.timeSlowTimer--;
-        if (this.boss) this.updateBoss();
-        this.updateProjectiles();
-        this.updateEnemies();
-        this.updateHazards();
-        this.updateBonuses();
+        if (this.timeSlowTimer > 0) this.timeSlowTimer -= dt;
+        if (this.boss) this.updateBoss(dt);
+        this.updateProjectiles(dt);
+        this.updateEnemies(dt);
+        this.updateHazards(dt);
+        this.updateBonuses(dt);
     }
     
-    this.particlePool.forEach(p => { if(p.active) p.update(); });
-    if (!this.enemyPool.some(e => e.active) && !this.boss && !this.playerExploding && !this.isTransitioning && Math.random() < 0.1) this.startRound();
+    this.particlePool.forEach(p => { if(p.active) p.update(dt); });
+    if (!this.enemyPool.some(e => e.active) && !this.boss && !this.playerExploding && !this.isTransitioning && Math.random() < 0.1 * dt) this.startRound();
   }
 
   spawnHazard() {
     this.hazards.push({ x: Math.random() * this.width, y: -50, vy: 5 + Math.random() * 3, text: '🔥' });
   }
 
-  updateHazards() {
+  updateHazards(dt: number) {
     for (let i = this.hazards.length - 1; i >= 0; i--) {
       let h = this.hazards[i]; 
       if (!h) continue; 
-      h.y += h.vy;
+      h.y += h.vy * dt;
       if (Math.hypot(h.x - this.player.x, h.y - this.player.y) < 32) {
         this.handleMiss();
         if (this.hazards[i]) this.hazards.splice(i, 1);
@@ -272,12 +275,12 @@ export class GameEngine {
     }
   }
 
-  updateProjectiles() {
+  updateProjectiles(dt: number) {
       this.projectilePool.forEach(p => {
           if (!p.active) return;
-          if (p.type === 'beam') { p.life--; p.x = this.player.x; if (p.life <= 0) p.active = false; }
-          else { p.x += p.vx; p.y += p.vy; }
-          if (p.type === 'missile') this.applyHoming(p);
+          if (p.type === 'beam') { p.life -= dt; p.x = this.player.x; if (p.life <= 0) p.active = false; }
+          else { p.x += p.vx * dt; p.y += p.vy * dt; }
+          if (p.type === 'missile') this.applyHoming(p, dt);
           if (this.boss && p.active) {
               let isHit = p.type === 'beam' ? (Math.abs(p.x - this.boss.x) < 140 && this.boss.y < p.y) : (Math.hypot(p.x - this.boss.x, p.y - this.boss.y) < (p.type === 'fire' ? 170 : 140));
               if (isHit) { this.damageBoss(p); if (p.type !== 'beam') p.active = false; }
@@ -296,18 +299,18 @@ export class GameEngine {
       if (this.boss.hp <= 0) this.endBossFight();
   }
 
-  applyHoming(p: any) {
+  applyHoming(p: any, dt: number) {
       const target = this.enemyPool.find(e => e.active && e.isCorrect) || this.boss;
       if (target) {
           const angle = Math.atan2(target.y - p.y, target.x - p.x);
-          p.vx += Math.cos(angle) * 2.2; p.vy += Math.sin(angle) * 2.2;
+          p.vx += Math.cos(angle) * 2.2 * dt; p.vy += Math.sin(angle) * 2.2 * dt;
           const speed = Math.hypot(p.vx, p.vy);
           if(speed > 16) { p.vx *= 16/speed; p.vy *= 16/speed; }
           p.angle = Math.atan2(p.vy, p.vx) + Math.PI/2;
       }
   }
 
-  updateEnemies() {
+  updateEnemies(dt: number) {
       if (this.isTransitioning) return;
       const isMobile = this.width < 600;
       
@@ -317,7 +320,7 @@ export class GameEngine {
 
           let currentSpeed = e.speed;
           if ((this.config.modifier === 'accelerate' || this.config.modifier === 'final') && e.y > this.height * 0.3) currentSpeed *= 1.4;
-          e.y += this.timeSlowTimer > 0 ? currentSpeed * 0.35 : currentSpeed;
+          e.y += (this.timeSlowTimer > 0 ? currentSpeed * 0.35 : currentSpeed) * dt;
 
           if (this.config.modifier === 'wave' || this.config.modifier === 'final') {
             const waveWidth = isMobile ? 30 : 50;
@@ -325,14 +328,14 @@ export class GameEngine {
           }
           
           if (this.config.modifier === 'chaos' || this.config.modifier === 'final') {
-            e.x += (Math.random() - 0.5) * 5;
-            e.y += (Math.random() - 0.5) * 2;
+            e.x += (Math.random() - 0.5) * 5 * dt;
+            e.y += (Math.random() - 0.5) * 2 * dt;
           }
 
           if (this.config.modifier === 'vortex' || this.config.modifier === 'final') {
             const centerX = this.width / 2;
             const dist = centerX - e.x;
-            e.x += dist * 0.01;
+            e.x += dist * 0.01 * dt;
           }
 
           if (e.y > this.height + 100) { e.active = false; if(e.isCorrect) this.handleMiss(); continue; }
@@ -488,7 +491,6 @@ export class GameEngine {
       });
       if (!this.playerExploding) this.drawPlayer();
       this.bossProjectiles.forEach(p => {
-          p.y += p.vy; if (p.vx) p.x += p.vx;
           this.ctx.save(); this.ctx.fillStyle = '#ef4444'; this.ctx.shadowBlur = 20; this.ctx.shadowColor = '#ef4444';
           this.ctx.beginPath(); this.ctx.arc(p.x, p.y, 15, 0, Math.PI*2); this.ctx.fill(); this.ctx.restore();
           if(Math.hypot(p.x - this.player.x, p.y - this.player.y) < 32) { this.handleMiss(); p.y = 5000; }
@@ -612,11 +614,14 @@ export class GameEngine {
       this.ctx.restore();
   }
 
-  updateBoss() { 
+  updateBoss(dt: number) { 
       const b = this.boss; if (!b) return;
-      b.frame++; b.x = (this.width/2) + Math.sin(b.frame*0.012)*(this.width/4.5);
-      if(b.y < b.targetY) b.y+=0.9;
-      if(this.gameFrame % b.attackRate === 0) {
+      b.frame += dt; b.x = (this.width/2) + Math.sin(b.frame*0.012)*(this.width/4.5);
+      if(b.y < b.targetY) b.y += 0.9 * dt;
+
+      b.timer = (b.timer || 0) + dt;
+      if(b.timer >= b.attackRate) {
+          b.timer = 0;
           const typeIdx = ((Math.floor(this.level / 10) - 1) % 6) + 1;
           if (typeIdx === 1) { 
               this.bossProjectiles.push({x: b.x - 120, y: b.y + 100, vy: 4.0, vx: 0});
@@ -632,6 +637,13 @@ export class GameEngine {
               for(let i=0; i<8; i++) { const ang = (this.gameFrame*0.1) + (i/8)*Math.PI*2; this.bossProjectiles.push({x: b.x, y: b.y+100, vy: Math.sin(ang)*4, vx: Math.cos(ang)*4}); }
           }
           Sound.play('shoot');
+      }
+
+      for (let i = this.bossProjectiles.length - 1; i >= 0; i--) {
+        let p = this.bossProjectiles[i];
+        p.y += p.vy * dt;
+        if (p.vx) p.x += p.vx * dt;
+        if(Math.hypot(p.x - this.player.x, p.y - this.player.y) < 32) { this.handleMiss(); this.bossProjectiles.splice(i, 1); }
       }
   }
 
@@ -713,10 +725,10 @@ export class GameEngine {
       this.bonuses.push({x: Math.random()*this.width, y: -50, type: types[Math.floor(Math.random() * types.length)]}); 
   }
 
-  updateBonuses() { 
+  updateBonuses(dt: number) { 
       for (let i = this.bonuses.length - 1; i >= 0; i--) {
           let b = this.bonuses[i]; if (!b) continue;
-          b.y += 3.5;
+          b.y += 3.5 * dt;
           if (Math.hypot(b.x - this.player.x, b.y - this.player.y) < 68) {
               if (b.type === 'coin') { this.score += 250; Sound.play('coin'); this.onFeedback("+250!", true); }
               else if (b.type === 'points_star') { this.score += 2000; Sound.play('coin'); this.onFeedback("+2000!", true); }
