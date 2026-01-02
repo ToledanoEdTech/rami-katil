@@ -1,43 +1,35 @@
 
-const CACHE_NAME = 'aramaic-master-v4';
+const CACHE_NAME = 'aramaic-master-v5';
 
-// לא נגדיר רשימת קבצים קשיחה - נתפוס אותם תוך כדי תנועה
 self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((name) => caches.delete(name))
-      );
-    })
+    caches.keys().then((keys) => Promise.all(keys.map(k => caches.delete(k))))
   );
   self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET' || !event.request.url.startsWith('http')) return;
-
+  // נותן עדיפות לרשת כדי למנוע MIME Errors בזמן פיתוח
+  if (event.request.mode === 'navigate') {
+    event.respondWith(fetch(event.request).catch(() => caches.match('./index.html')));
+    return;
+  }
+  
   event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        if (response.status === 200) {
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseClone);
-          });
+    caches.match(event.request).then((cached) => {
+      return cached || fetch(event.request).then(response => {
+        if (response.ok && event.request.method === 'GET') {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
         }
         return response;
-      })
-      .catch(() => {
-        return caches.match(event.request).then((cached) => {
-          if (cached) return cached;
-          if (event.request.mode === 'navigate') {
-            return caches.match('./index.html');
-          }
-        });
-      })
+      });
+    }).catch(() => {
+       // שקט במקרה של כשל
+    })
   );
 });

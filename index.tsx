@@ -3,45 +3,40 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 
-// רישום SW רק בסביבת פרודקשן אמיתית
+// רישום SW
 if ('serviceWorker' in navigator) {
   const isProduction = window.location.hostname.includes('github.io');
   if (isProduction) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js')
-        .catch(err => console.warn('SW registration skipped:', err));
+      navigator.serviceWorker.register('./sw.js').catch(() => {});
     });
   }
 }
 
-const mount = () => {
+const initApp = () => {
   const container = document.getElementById('root');
   if (!container) return;
   
   try {
     const root = createRoot(container);
-    root.render(
-      <React.StrictMode>
-        <App />
-      </React.StrictMode>
-    );
+    root.render(<App />);
     
-    // הסרת מסך הטעינה אחרי שה-React התחיל לעבוד
+    // הסרת מסך הטעינה
     setTimeout(() => {
       const loader = document.getElementById('loading-screen');
       if (loader) {
         loader.style.opacity = '0';
         setTimeout(() => loader.remove(), 500);
       }
-    }, 1000);
-    
-  } catch (error) {
-    console.error("Mount error:", error);
+    }, 800);
+  } catch (e) {
+    console.error("Render error:", e);
   }
 };
 
+// בגלל השימוש ב-Babel, אנחנו מוודאים שה-DOM מוכן
 if (document.readyState === 'complete') {
-  mount();
+  initApp();
 } else {
-  window.addEventListener('load', mount);
+  window.addEventListener('load', initApp);
 }
