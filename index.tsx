@@ -3,40 +3,33 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 
-// רישום SW
+// רישום ה-Service Worker
 if ('serviceWorker' in navigator) {
-  const isProduction = window.location.hostname.includes('github.io');
-  if (isProduction) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js').catch(() => {});
-    });
-  }
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW registration failed:', err));
+  });
 }
 
-const initApp = () => {
-  const container = document.getElementById('root');
-  if (!container) return;
-  
+function mount() {
   try {
-    const root = createRoot(container);
-    root.render(<App />);
-    
-    // הסרת מסך הטעינה
-    setTimeout(() => {
-      const loader = document.getElementById('loading-screen');
-      if (loader) {
-        loader.style.opacity = '0';
-        setTimeout(() => loader.remove(), 500);
+      const container = document.getElementById('root');
+      if (container) {
+        const root = createRoot(container);
+        root.render(
+          <React.StrictMode>
+            <App />
+          </React.StrictMode>
+        );
+      } else {
+        setTimeout(mount, 10);
       }
-    }, 800);
-  } catch (e) {
-    console.error("Render error:", e);
+  } catch (err: any) {
+      document.body.innerHTML = `<div style="color:white; padding:20px;">
+        <h1>Application Error</h1>
+        <pre>${err.toString()}</pre>
+        <pre>${err.stack}</pre>
+      </div>`;
   }
-};
-
-// בגלל השימוש ב-Babel, אנחנו מוודאים שה-DOM מוכן
-if (document.readyState === 'complete') {
-  initApp();
-} else {
-  window.addEventListener('load', initApp);
 }
+
+mount();
