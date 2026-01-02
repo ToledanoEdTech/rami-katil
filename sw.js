@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'aramaic-master-v2';
+const CACHE_NAME = 'aramaic-master-v3';
 
 // רשימת קבצים בסיסית - אנחנו נטען את השאר באופן דינמי
 const INITIAL_ASSETS = [
@@ -10,7 +10,10 @@ const INITIAL_ASSETS = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(INITIAL_ASSETS);
+      // נשתמש ב-addAll עם טיפול בשגיאות לכל קובץ בנפרד למקרה שאחד חסר
+      return Promise.allSettled(
+        INITIAL_ASSETS.map(asset => cache.add(asset))
+      );
     })
   );
   self.skipWaiting();
@@ -28,11 +31,13 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // אסטרטגיה: קודם מהרשת, אם נכשל (אופליין) - מהמטמון
+  // נתעלם מבקשות שאינן HTTP/HTTPS (כמו chrome-extension)
+  if (!event.request.url.startsWith('http')) return;
+
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // שמירת עותק עדכני במטמון לשימוש עתידי באופליין
+        // שמירת עותק עדכני במטמון לשימוש עתידי באופליין רק עבור בקשות מוצלחות
         if (event.request.method === 'GET' && response.status === 200) {
           const responseClone = response.clone();
           caches.open(CACHE_NAME).then((cache) => {
