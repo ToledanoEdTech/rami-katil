@@ -383,9 +383,9 @@ const equipSkin = (id: string) => {
       )}
 
       {feedback && (
-          <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-4xl md:text-7xl font-black drop-shadow-2xl transition-all transform scale-125 duration-300 z-50 text-center
+          <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-2xl md:text-4xl font-black drop-shadow-2xl transition-all transform scale-110 duration-300 z-50 text-center
             ${feedback.isGood ? 'text-amber-400' : 'text-red-500'}`}>
-              <div className="font-aramaic mb-2">{feedback.msg}</div>
+              <div className="font-aramaic mb-1">{feedback.msg}</div>
           </div>
       )}
 

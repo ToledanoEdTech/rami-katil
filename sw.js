@@ -1,9 +1,8 @@
 
-const CACHE_NAME = 'aramaic-master-v1';
+const CACHE_NAME = 'aramaic-master-v2'; // עדכון גרסה למחיקת מטמון ישן
 const ASSETS = [
   './',
   './index.html',
-  './index.tsx',
   './manifest.json'
 ];
 
@@ -13,12 +12,25 @@ self.addEventListener('install', (event) => {
       return cache.addAll(ASSETS);
     })
   );
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.filter((name) => name !== CACHE_NAME)
+          .map((name) => caches.delete(name))
+      );
+    })
+  );
 });
 
 self.addEventListener('fetch', (event) => {
+  // אסטרטגיית Network First עבור קבצי המקור כדי להבטיח עדכונים
   event.respondWith(
-    caches.match(event.request).then((response) => {
-      return response || fetch(event.request);
+    fetch(event.request).catch(() => {
+      return caches.match(event.request);
     })
   );
 });

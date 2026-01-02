@@ -110,9 +110,7 @@ export class GameEngine {
     const isMobile = this.width < 600;
     this.player = { x: this.width / 2, y: this.height - (isMobile ? 180 : 150), width: 24, height: 24, isHit: false };
     
-    // סינון דינמי של המילון לפי הקטגוריה שנבחרה
     this.activeDictionary = DICTIONARY.filter(w => w.cat === config.category);
-    // אם המילון ריק מסיבה כלשהי, נשתמש בכל המילים
     if (this.activeDictionary.length === 0) this.activeDictionary = [...DICTIONARY];
     
     this.currentDeck = [...this.activeDictionary];
@@ -364,8 +362,8 @@ export class GameEngine {
           if (this.combo >= 10) this.onAchievement('zurba');
           this.enemyPool.forEach(e => e.active = false);
           this.hazards = [];
-          if (Math.random() < 0.28) {
-              const types = ['fire', 'electric', 'missile', 'beam', 'time_potion'];
+          if (Math.random() < 0.35) {
+              const types = ['fire', 'electric', 'missile', 'beam', 'time_potion', 'bomb', 'life', 'shield_item'];
               this.bonuses.push({x, y, type: types[Math.floor(Math.random() * types.length)]});
           }
           setTimeout(() => { this.level++; this.startRound(); }, 400);
@@ -491,6 +489,7 @@ export class GameEngine {
       });
       if (!this.playerExploding) this.drawPlayer();
       this.bossProjectiles.forEach(p => {
+          if (!p) return;
           this.ctx.save(); this.ctx.fillStyle = '#ef4444'; this.ctx.shadowBlur = 20; this.ctx.shadowColor = '#ef4444';
           this.ctx.beginPath(); this.ctx.arc(p.x, p.y, 15, 0, Math.PI*2); this.ctx.fill(); this.ctx.restore();
           if(Math.hypot(p.x - this.player.x, p.y - this.player.y) < 32) { this.handleMiss(); p.y = 5000; }
@@ -641,6 +640,7 @@ export class GameEngine {
 
       for (let i = this.bossProjectiles.length - 1; i >= 0; i--) {
         let p = this.bossProjectiles[i];
+        if (!p) continue;
         p.y += p.vy * dt;
         if (p.vx) p.x += p.vx * dt;
         if(Math.hypot(p.x - this.player.x, p.y - this.player.y) < 32) { this.handleMiss(); this.bossProjectiles.splice(i, 1); }
@@ -714,6 +714,10 @@ export class GameEngine {
       else if(b.type === 'life') { color = '#22c55e'; icon = '❤️'; }
       else if(b.type === 'missile') { color = '#ef4444'; icon = '🚀'; }
       else if(b.type === 'time_potion') { color = '#a855f7'; icon = '⏳'; }
+      else if(b.type === 'bomb') { color = '#ef4444'; icon = '💣'; }
+      else if(b.type === 'shield_item') { color = '#3b82f6'; icon = '🛡️'; }
+      else if(b.type === 'points_star') { color = '#eab308'; icon = '⭐'; }
+
       this.ctx.fillStyle = color; this.ctx.shadowBlur = 25; this.ctx.shadowColor = color;
       this.ctx.beginPath(); this.ctx.roundRect(-24, -24, 48, 48, 12); this.ctx.fill();
       this.ctx.rotate(-rot); this.ctx.fillStyle = 'white'; this.ctx.font = 'bold 24px Rubik'; this.ctx.textAlign = 'center';
@@ -721,22 +725,32 @@ export class GameEngine {
   }
 
   spawnBonus() { 
-      const types = ['coin', 'life', 'shield_item', 'points_star', 'time_potion'];
+      const types = ['coin', 'life', 'shield_item', 'points_star', 'time_potion', 'bomb'];
       this.bonuses.push({x: Math.random()*this.width, y: -50, type: types[Math.floor(Math.random() * types.length)]}); 
   }
 
   updateBonuses(dt: number) { 
       for (let i = this.bonuses.length - 1; i >= 0; i--) {
-          let b = this.bonuses[i]; if (!b) continue;
+          let b = this.bonuses[i]; 
+          if (!b) continue;
           b.y += 3.5 * dt;
           if (Math.hypot(b.x - this.player.x, b.y - this.player.y) < 68) {
               if (b.type === 'coin') { this.score += 250; Sound.play('coin'); this.onFeedback("+250!", true); }
               else if (b.type === 'points_star') { this.score += 2000; Sound.play('coin'); this.onFeedback("+2000!", true); }
-              else if (b.type === 'life') { this.lives = Math.min(this.lives + 1, 5); Sound.play('powerup'); this.onStatsUpdate({ lives: this.lives }); }
-              else if (b.type === 'shield_item') { this.shields++; Sound.play('powerup'); this.onStatsUpdate({ shields: this.shields }); }
-              else if (b.type === 'time_potion') { this.potions++; Sound.play('powerup'); this.onStatsUpdate({ potions: this.potions }); }
-              else { this.weaponType = b.type; this.weaponAmmo = 30; Sound.play('powerup'); this.onFeedback(`נשק ${b.type} הופעל!`, true); }
-              this.onStatsUpdate({ score: this.score, weaponAmmo: this.weaponAmmo, potions: this.potions, shields: this.shields }); 
+              else if (b.type === 'life') { this.lives = Math.min(this.lives + 1, 5); Sound.play('powerup'); this.onFeedback("+חיים!", true); }
+              else if (b.type === 'shield_item') { this.shields++; Sound.play('powerup'); this.onFeedback("+מגן!", true); }
+              else if (b.type === 'bomb') { this.bombs++; Sound.play('powerup'); this.onFeedback("+פצצה!", true); }
+              else if (b.type === 'time_potion') { this.potions++; Sound.play('powerup'); this.onFeedback("+שיקוי!", true); }
+              else { this.weaponType = b.type; this.weaponAmmo = 30; Sound.play('powerup'); this.onFeedback(`${b.type}!`, true); }
+              
+              this.onStatsUpdate({ 
+                  score: this.score, 
+                  weaponAmmo: this.weaponAmmo, 
+                  potions: this.potions, 
+                  shields: this.shields, 
+                  bombs: this.bombs,
+                  lives: this.lives
+              }); 
               if (this.bonuses[i]) this.bonuses.splice(i, 1);
           } else if (b.y > this.height + 100) { this.bonuses.splice(i, 1); }
       }
@@ -752,7 +766,7 @@ export class GameEngine {
           if (p.type === 'beam') p.life = 10; 
           if (p.type === 'electric') p.life = 25;
           if (p.type === 'missile') { p.vy = -10; p.vx = (Math.random()-0.5)*10; }
-          if (this.config.skin === 'skin_default' || this.weaponAmmo < 9000) { if (this.weaponAmmo > 0) { this.weaponAmmo--; if (this.weaponAmmo === 0) { this.onFeedback("נגמרה התחמושת!", false); this.applySkinWeapon(); } } }
+          if (this.config.skin === 'skin_default' || this.weaponAmmo < 9000) { if (this.weaponAmmo > 0) { this.weaponAmmo--; if (this.weaponAmmo === 0) { this.onFeedback("תחמושת נגמרה", false); this.applySkinWeapon(); } } }
           this.onStatsUpdate({ weaponAmmo: this.weaponAmmo });
       }
   }
@@ -771,9 +785,15 @@ export class GameEngine {
       if (!this.boss) return;
       if (!this.bossDamageTaken) this.onAchievement('sinai');
       Sound.play('explosion');
-      this.spawnExplosion(this.boss.x, this.boss.y, 'gold', 200); this.score += 10000; this.boss = null; this.level++; this.triggerShake(50);
+      this.spawnExplosion(this.boss.x, this.boss.y, 'gold', 200); 
+      this.score += 10000; 
+      this.boss = null; 
+      this.bossProjectiles = []; 
+      this.level++; 
+      this.triggerShake(50);
       this.onStatsUpdate({bossActive: false, bossHpPercent: 0, score: this.score, level: this.level}); 
-      this.onFeedback("ניצחון!", true); setTimeout(() => this.startRound(), 3000);
+      this.onFeedback("ניצחון!", true); 
+      setTimeout(() => this.startRound(), 3000);
   }
 
   setPlayerPos(x: number, y: number) { if (!this.isPaused) { this.player.x = x; this.player.y = Math.max(this.height * 0.4, Math.min(y, this.height - 100)); } }
