@@ -7,10 +7,17 @@
       "src": "https://cdn-icons-png.flaticon.com/512/3067/3067451.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3067/3067451.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
   "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
   "theme_color": "#020617",
   "background_color": "#020617",
