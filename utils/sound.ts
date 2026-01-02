@@ -8,10 +8,9 @@ export const Sound = {
   currentMode: 'menu' as 'menu' | 'game',
   noiseBuffer: null as AudioBuffer | null,
   
-  // כאן אתה יכול להדביק קישור ישיר לקובץ ה-MP3 שאתה רוצה
-  // לדוגמה: 'https://www.mysite.com/menu-music.mp3'
-  MENU_MUSIC_URL: '', 
-  GAME_MUSIC_URL: '',
+  // נתיבים לקבצים מקומיים - יש להניח את הקבצים ליד index.html
+  MENU_MUSIC_URL: './menu.mp3', 
+  GAME_MUSIC_URL: './game.mp3',
   
   buffers: {} as Record<string, AudioBuffer>,
   currentSource: null as AudioBufferSourceNode | null,
@@ -23,12 +22,12 @@ export const Sound = {
         this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
         this.masterGain = this.ctx.createGain();
         this.masterGain.connect(this.ctx.destination);
-        this.masterGain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+        this.masterGain.gain.setValueAtTime(0.4, this.ctx.currentTime);
         this.createNoiseBuffer();
         
-        // טעינת קבצים חיצוניים אם קיימים
-        if (this.MENU_MUSIC_URL) this.loadExternalSound('menu', this.MENU_MUSIC_URL);
-        if (this.GAME_MUSIC_URL) this.loadExternalSound('game', this.GAME_MUSIC_URL);
+        // טעינה מראש של קבצי מוזיקה אם קיימים
+        this.loadExternalSound('menu', this.MENU_MUSIC_URL);
+        this.loadExternalSound('game', this.GAME_MUSIC_URL);
       }
     } catch (e) {
       console.warn("Sound init failed:", e);
@@ -39,21 +38,22 @@ export const Sound = {
     if (!this.ctx) return;
     try {
       const response = await fetch(url);
+      if (!response.ok) throw new Error("File not found");
       const arrayBuffer = await response.arrayBuffer();
       const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer);
       this.buffers[key] = audioBuffer;
-      // אם אנחנו כבר במוד הזה, נתחיל לנגן מיד
-      if (this.currentMode === key && !this.isMuted) {
+      // אם המוזיקה אמורה להתנגן עכשיו, נתחיל אותה
+      if (this.currentMode === key && !this.isMuted && !this.currentSource) {
         this.startMusic(key as any);
       }
     } catch (e) {
-      console.error(`Failed to load sound: ${key}`, e);
+      console.log(`Note: Local music file ${url} not found, using fallback tones.`);
     }
   },
 
   createNoiseBuffer: function() {
     if (!this.ctx) return;
-    const bufferSize = this.ctx.sampleRate * 2;
+    const bufferSize = this.ctx.sampleRate * 1; // 1 second of noise
     const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
     const output = buffer.getChannelData(0);
     for (let i = 0; i < bufferSize; i++) {
@@ -102,26 +102,39 @@ export const Sound = {
     const now = this.ctx.currentTime;
 
     if (type === 'shoot') {
-      // צליל ירי "פאנצ'י"
-      this.playTone(200, 'triangle', 0.15, 0.15);
-      const osc = this.playTone(800, 'sine', 0.1, 0.05);
-      if (osc) osc.frequency.exponentialRampToValueAtTime(100, now + 0.1);
+      // ירי משופר: ירידה מהירה בתדר (Laser fire)
+      const osc = this.playTone(800, 'square', 0.15, 0.12);
+      if (osc) osc.frequency.exponentialRampToValueAtTime(100, now + 0.15);
+      
+      // תוספת קליק חזק להתחלה
+      this.playTone(150, 'triangle', 0.1, 0.2);
     } else if (type === 'ui_click') {
       this.playTone(1000, 'sine', 0.05, 0.05);
     } else if (type === 'hit') {
-      this.playTone(60, 'sawtooth', 0.3, 0.2);
+      // פגיעה: רעש נמוך ומחוספס
+      this.playTone(60, 'sawtooth', 0.3, 0.2, 'lin');
+      if (this.noiseBuffer) {
+        this.playNoise(200, 0.2, 0.1);
+      }
     } else if (type === 'explosion' || type === 'bomb') {
-      // פיצוץ עמוק וסינמטי
+      // פיצוץ משופר: שילוב של תדר נמוך מאוד ורעש לבן מסונן
       this.playTone(40, 'sine', 1.2, 0.6, 'lin');
+      this.playTone(80, 'triangle', 0.8, 0.4, 'lin');
+      
       if (this.noiseBuffer) {
         const source = this.ctx.createBufferSource();
         const filter = this.ctx.createBiquadFilter();
         const g = this.ctx.createGain();
+        
         filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(300, now);
+        filter.frequency.setValueAtTime(1500, now);
+        filter.frequency.exponentialRampToValueAtTime(40, now + 1.0);
+        filter.Q.setValueAtTime(10, now);
+        
         source.buffer = this.noiseBuffer;
-        g.gain.setValueAtTime(0.3, now);
-        g.gain.exponentialRampToValueAtTime(0.001, now + 1.0);
+        g.gain.setValueAtTime(0.5, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
+        
         source.connect(filter);
         filter.connect(g);
         g.connect(this.masterGain);
@@ -130,22 +143,42 @@ export const Sound = {
     } else if (type === 'coin' || type === 'powerup') {
       const freqs = [523.25, 659.25, 783.99, 1046.50];
       freqs.forEach((f, i) => {
-        setTimeout(() => this.playTone(f, 'sine', 0.4, 0.05), i * 50);
+        setTimeout(() => this.playTone(f, 'sine', 0.3, 0.08), i * 50);
       });
     } else if (type === 'boss_hit') {
-      this.playTone(100, 'square', 0.15, 0.1);
+      // פגיעה מתכתית בבוס
+      const osc = this.playTone(400, 'sawtooth', 0.1, 0.15);
+      if (osc) osc.frequency.linearRampToValueAtTime(50, now + 0.1);
     }
+  },
+
+  playNoise: function(filterFreq: number, duration: number, volume: number) {
+    if (!this.ctx || !this.noiseBuffer || !this.masterGain) return;
+    const now = this.ctx.currentTime;
+    const source = this.ctx.createBufferSource();
+    const filter = this.ctx.createBiquadFilter();
+    const g = this.ctx.createGain();
+    
+    source.buffer = this.noiseBuffer;
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(filterFreq, now);
+    g.gain.setValueAtTime(volume, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + duration);
+    
+    source.connect(filter);
+    filter.connect(g);
+    g.connect(this.masterGain);
+    source.start(now);
   },
 
   stopMusic: function() {
     if (this.currentSource) {
       const now = this.ctx?.currentTime || 0;
-      // Fade out עדין לפני עצירה
       if (this.currentMusicGain) {
         this.currentMusicGain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
       }
       const src = this.currentSource;
-      setTimeout(() => { try { src.stop(); } catch(e){} }, 500);
+      setTimeout(() => { try { src.stop(); } catch(e){} }, 600);
       this.currentSource = null;
     }
     if (this.musicInterval) {
@@ -157,8 +190,6 @@ export const Sound = {
   startMusic: function(mode: 'menu' | 'game' = 'menu') {
     this.init();
     if (this.isMuted || !this.ctx || !this.masterGain) return;
-    
-    // אם אנחנו כבר מנגנים את המוד הנכון, אל תתחיל מחדש
     if (this.currentMode === mode && this.currentSource) return;
 
     this.stopMusic();
@@ -167,25 +198,21 @@ export const Sound = {
 
     const now = this.ctx.currentTime;
 
-    // אם יש קובץ טעון ב-Buffer, נשתמש בו
+    // אם הקובץ נטען בהצלחה
     if (this.buffers[mode]) {
       const source = this.ctx.createBufferSource();
       const musicGain = this.ctx.createGain();
-      
       source.buffer = this.buffers[mode];
       source.loop = true;
-      
       musicGain.gain.setValueAtTime(0, now);
-      musicGain.gain.linearRampToValueAtTime(0.4, now + 1.0); // Fade in
-      
+      musicGain.gain.linearRampToValueAtTime(0.35, now + 1.5);
       source.connect(musicGain);
       musicGain.connect(this.masterGain);
-      
       source.start(0);
       this.currentSource = source;
       this.currentMusicGain = musicGain;
     } else {
-      // Fallback למוזיקה סינתטית אם אין קובץ חיצוני
+      // גיבוי: מוזיקה סינתטית אם אין קובץ
       this.playMusicLoop();
     }
   },
@@ -197,24 +224,19 @@ export const Sound = {
     try {
       const now = this.ctx.currentTime;
       if (this.currentMode === 'menu') {
-        // מוזיקת תפריט סינתטית - דרמטית יותר (תופים וכינורות)
-        const scale = [220, 261.63, 293.66, 329.63, 392]; // Am
+        const scale = [220, 261.63, 293.66, 329.63, 392];
         const freq = scale[this.noteIndex % scale.length];
-        
-        // "נבל" דרמטי
-        this.playTone(freq, 'triangle', 2.0, 0.05, 'exp');
-        this.playTone(freq / 2, 'sine', 2.0, 0.1, 'exp');
-        
+        this.playTone(freq, 'triangle', 2.0, 0.04, 'exp');
+        this.playTone(freq / 2, 'sine', 2.5, 0.08, 'exp');
         this.noteIndex++;
-        this.musicInterval = setTimeout(() => this.playMusicLoop(), 1000);
+        this.musicInterval = setTimeout(() => this.playMusicLoop(), 1200);
       } else {
-        // מוזיקת משחק - קצבית
-        const tempo = 140;
-        const duration = 60 / tempo;
-        const freq = (this.noteIndex % 4 === 0) ? 55 : 110;
-        this.playTone(freq, 'square', duration, 0.05, 'exp');
+        const duration = 0.4;
+        const freqs = [110, 110, 130, 146];
+        const freq = freqs[this.noteIndex % freqs.length];
+        this.playTone(freq, 'square', duration, 0.04, 'exp');
         this.noteIndex++;
-        this.musicInterval = setTimeout(() => this.playMusicLoop(), duration * 500);
+        this.musicInterval = setTimeout(() => this.playMusicLoop(), duration * 1000);
       }
     } catch (e) {}
   }
