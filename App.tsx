@@ -5,18 +5,32 @@ import { SHOP_ITEMS, SCRIPT_URL, ACHIEVEMENTS, SUGIOT } from './constants';
 import { Sound } from './utils/sound';
 import { GameEngine, GameConfig } from './game/GameEngine';
 
+// פונקציות עזר חסינות לשגיאות אבטחה (מצב אנונימי/אורח)
 const safeParse = (key: string, fallback: any) => {
   try {
-    const item = localStorage.getItem(key);
+    const item = window.localStorage.getItem(key);
     return item ? JSON.parse(item) : fallback;
   } catch (e) {
+    console.warn("LocalStorage access denied:", e);
     return fallback;
   }
 };
 
 const safeInt = (key: string, fallback: number) => {
-  const val = localStorage.getItem(key);
-  return val ? parseInt(val, 10) : fallback;
+  try {
+    const val = window.localStorage.getItem(key);
+    return val ? parseInt(val, 10) : fallback;
+  } catch (e) {
+    return fallback;
+  }
+};
+
+const safeSet = (key: string, value: string) => {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch (e) {
+    // מתעלמים בשקט אם אי אפשר לשמור
+  }
 };
 
 // רכיב אייקון מטבע זהב איכותי
@@ -30,7 +44,7 @@ const GoldCoin = ({ size = 24 }: { size?: number }) => (
 
 function App() {
   const [gameState, setGameState] = useState<GameState>('MENU');
-  const [coins, setCoins] = useState(safeInt('coins', 0));
+  const [coins, setCoins] = useState(() => safeInt('coins', 0));
   const [isPaused, setIsPaused] = useState(false);
   const [displayScore, setDisplayScore] = useState(0);
   const [unlockedAchievements, setUnlockedAchievements] = useState<string[]>(() => safeParse('achievements', []));
@@ -38,13 +52,18 @@ function App() {
   const [maxLevelReached, setMaxLevelReached] = useState(() => safeInt('maxLevel', 1));
   const [selectedSugia, setSelectedSugia] = useState<Sugia | null>(null);
   
-  const [inventory, setInventory] = useState(() => ({
-    bombs: safeInt('bombs', 1),
-    shields: safeInt('shields', 0),
-    potions: safeInt('potions', 0),
-    skins: safeParse('skins', ["skin_default"]),
-    currentSkin: localStorage.getItem('currentSkin') || 'skin_default'
-  }));
+  const [inventory, setInventory] = useState(() => {
+    let savedSkin = 'skin_default';
+    try { savedSkin = window.localStorage.getItem('currentSkin') || 'skin_default'; } catch(e) {}
+    
+    return {
+      bombs: safeInt('bombs', 1),
+      shields: safeInt('shields', 0),
+      potions: safeInt('potions', 0),
+      skins: safeParse('skins', ["skin_default"]),
+      currentSkin: savedSkin
+    };
+  });
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<GameEngine | null>(null);
@@ -72,7 +91,7 @@ function App() {
     if (gameState === 'MENU') {
       Sound.startMusic('menu');
     }
-  }, []);
+  }, [gameState]);
 
   useEffect(() => {
     if (displayScore < stats.score) {
@@ -103,7 +122,7 @@ function App() {
     setUnlockedAchievements(prev => {
       if (prev.includes(id)) return prev;
       const newUnlocked = [...prev, id];
-      localStorage.setItem('achievements', JSON.stringify(newUnlocked));
+      safeSet('achievements', JSON.stringify(newUnlocked));
       const ach = ACHIEVEMENTS.find(a => a.id === id);
       if (ach) {
         setUnlockNotification(ach);
@@ -160,7 +179,7 @@ function App() {
                             const newStats = {...prev, ...s};
                             if (newStats.level > maxLevelReached) {
                               setMaxLevelReached(newStats.level);
-                              localStorage.setItem('maxLevel', newStats.level.toString());
+                              safeSet('maxLevel', newStats.level.toString());
                             }
                             return newStats;
                         });
@@ -172,7 +191,7 @@ function App() {
                         const earned = Math.floor(finalScore / 20);
                         const newCoins = coins + earned;
                         setCoins(newCoins);
-                        localStorage.setItem('coins', newCoins.toString());
+                        safeSet('coins', newCoins.toString());
                     },
                     onFeedback: (msg: string, isGood: boolean) => {
                         setFeedback({msg, isGood});
@@ -252,18 +271,18 @@ function App() {
     if (coins >= item.price) {
         const newCoins = coins - item.price;
         setCoins(newCoins);
-        localStorage.setItem('coins', newCoins.toString());
+        safeSet('coins', newCoins.toString());
         if(item.type === 'skin') {
             const newSkins = [...inventory.skins, item.id];
             setInventory(prev => ({...prev, skins: newSkins}));
-            localStorage.setItem('skins', JSON.stringify(newSkins));
+            safeSet('skins', JSON.stringify(newSkins));
             const allSkins = SHOP_ITEMS.filter(i => i.type === 'skin').map(i => i.id);
             if (allSkins.every(sId => newSkins.includes(sId))) { unlockAchievement('gamir'); }
         } else {
             let key: 'bombs'|'shields'|'potions' = item.id.includes('bomb') ? 'bombs' : item.id.includes('shield') ? 'shields' : 'potions';
             const newVal = (inventory[key] as number) + 1;
             setInventory(prev => ({...prev, [key]: newVal}));
-            localStorage.setItem(key, newVal.toString());
+            safeSet(key, newVal.toString());
         }
         Sound.play('powerup');
     } else { alert('אין לך מספיק מטבעות!'); }
@@ -272,7 +291,7 @@ function App() {
 const equipSkin = (id: string) => {
     Sound.play('ui_click');
     setInventory(prev => ({...prev, currentSkin: id}));
-    localStorage.setItem('currentSkin', id);
+    safeSet('currentSkin', id);
     setConfig(prev => ({...prev, skin: id}));
 };
 

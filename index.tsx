@@ -3,17 +3,13 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 
-// רישום Service Worker רק ב-Production (GitHub Pages)
+// רישום SW רק בסביבת פרודקשן אמיתית
 if ('serviceWorker' in navigator) {
-  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  const isGoog = window.location.hostname.includes('goog') || window.location.hostname.includes('ai.studio');
-
-  if (!isLocal && !isGoog) {
+  const isProduction = window.location.hostname.includes('github.io');
+  if (isProduction) {
     window.addEventListener('load', () => {
-      // שימוש בנתיב יחסי לרישום
       navigator.serviceWorker.register('./sw.js')
-        .then(reg => console.log('SW Registered:', reg.scope))
-        .catch(err => console.warn('SW Failed:', err));
+        .catch(err => console.warn('SW registration skipped:', err));
     });
   }
 }
@@ -22,12 +18,26 @@ const mount = () => {
   const container = document.getElementById('root');
   if (!container) return;
   
-  const root = createRoot(container);
-  root.render(
-    <React.StrictMode>
-      <App />
-    </React.StrictMode>
-  );
+  try {
+    const root = createRoot(container);
+    root.render(
+      <React.StrictMode>
+        <App />
+      </React.StrictMode>
+    );
+    
+    // הסרת מסך הטעינה אחרי שה-React התחיל לעבוד
+    setTimeout(() => {
+      const loader = document.getElementById('loading-screen');
+      if (loader) {
+        loader.style.opacity = '0';
+        setTimeout(() => loader.remove(), 500);
+      }
+    }, 1000);
+    
+  } catch (error) {
+    console.error("Mount error:", error);
+  }
 };
 
 if (document.readyState === 'complete') {
