@@ -31,6 +31,8 @@ class Particle {
 
 class PoolableProjectile {
     x = 0; y = 0; vx = 0; vy = 0; type = ''; life = 0; angle = 0; active = false;
+    targetY = -100; // הגובה אליו הקרן מגיעה
+    hasHit = false; // האם כבר פגע במשהו
 }
 
 class PoolableEnemy {
@@ -63,6 +65,7 @@ export class GameEngine {
 
   score: number = 0;
   level: number = 1;
+  subLevel: number = 1; 
   lives: number = 3;
   combo: number = 0;
   bombs: number;
@@ -84,12 +87,13 @@ export class GameEngine {
   onGameOver: (score: number) => void;
   onFeedback: (msg: string, isGood: boolean) => void;
   onAchievement: (id: string) => void;
+  onUnitComplete: (stats: any) => void;
 
   constructor(
     canvas: HTMLCanvasElement, 
     config: GameConfig,
     inventory: { bombs: number, shields: number, potions: number },
-    callbacks: { onStatsUpdate: any, onGameOver: any, onFeedback: any, onAchievement: any }
+    callbacks: { onStatsUpdate: any, onGameOver: any, onFeedback: any, onAchievement: any, onUnitComplete: any }
   ) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d', { alpha: false }) as CanvasRenderingContext2D;
@@ -97,6 +101,7 @@ export class GameEngine {
     this.height = canvas.height;
     this.config = config;
     this.level = config.modifier ? SUGIOT.find(s => s.modifier === config.modifier)?.requiredLevel || 1 : 1;
+    this.subLevel = 1;
     this.bombs = inventory.bombs;
     this.shields = inventory.shields;
     this.potions = inventory.potions;
@@ -104,11 +109,11 @@ export class GameEngine {
     this.onGameOver = callbacks.onGameOver;
     this.onFeedback = callbacks.onFeedback;
     this.onAchievement = callbacks.onAchievement;
+    this.onUnitComplete = callbacks.onUnitComplete;
 
     this.applySkinWeapon();
 
     const isMobile = this.width < 600;
-    // הקטנת מידות השחקן במובייל לצורך התנגשויות מדויקות יותר
     const pW = isMobile ? 18 : 24;
     const pH = isMobile ? 18 : 24;
     this.player = { x: this.width / 2, y: this.height - (isMobile ? 180 : 150), width: pW, height: pH, isHit: false };
@@ -169,7 +174,7 @@ export class GameEngine {
     this.isTransitioning = false;
     if (this.enemyPool.some(e => e.active) || this.boss || this.playerExploding) return;
 
-    if (this.level % 10 === 0 && !this.boss) { this.startBossFight(); return; }
+    if (this.subLevel === 9 && !this.boss) { this.startBossFight(); return; }
     
     const currentSugia = SUGIOT.slice().reverse().find(s => this.level >= s.requiredLevel) || SUGIOT[0];
     this.config.modifier = currentSugia.modifier;
@@ -180,6 +185,7 @@ export class GameEngine {
     this.onStatsUpdate({ 
       currentWord: wordObj.aramaic, 
       level: this.level, 
+      subLevel: this.subLevel,
       weaponAmmo: this.weaponAmmo,
       sugiaTitle: currentSugia.title
     });
@@ -228,7 +234,7 @@ export class GameEngine {
   triggerShake(intensity: number) { this.shakeAmount = intensity; }
 
   update(dt: number = 1.0) {
-    if (this.isPaused) return;
+    if (this.isPaused || this.isTransitioning) return;
     this.gameFrame += dt;
     if (this.shakeAmount > 0.1) this.shakeAmount *= Math.pow(0.88, dt); else this.shakeAmount = 0;
 
@@ -238,7 +244,7 @@ export class GameEngine {
         this.explosionTimer -= dt;
         if (this.explosionTimer <= 0) this.onGameOver(this.score);
     } else {
-        if (Math.random() < 0.003 * dt) this.spawnBonus();
+        if (Math.random() < 0.004 * dt) this.spawnBonus();
         
         if (this.config.modifier === 'drift' || this.config.modifier === 'storm') {
           this.player.x += Math.sin(this.gameFrame * 0.03) * 1.5 * dt;
@@ -279,14 +285,30 @@ export class GameEngine {
   updateProjectiles(dt: number) {
       this.projectilePool.forEach(p => {
           if (!p.active) return;
-          if (p.type === 'beam') { p.life -= dt; p.x = this.player.x; if (p.life <= 0) p.active = false; }
+          if (p.type === 'beam') { 
+              p.life -= dt; 
+              p.x = this.player.x; 
+              if (p.life <= 0) p.active = false; 
+          }
           else { p.x += p.vx * dt; p.y += p.vy * dt; }
+          
           if (p.type === 'missile') this.applyHoming(p, dt);
-          if (this.boss && p.active) {
+          
+          if (this.boss && p.active && !p.hasHit) {
               const isMobile = this.width < 600;
               const hitRadius = isMobile ? 100 : 140;
               let isHit = p.type === 'beam' ? (Math.abs(p.x - this.boss.x) < hitRadius && this.boss.y < p.y) : (Math.hypot(p.x - this.boss.x, p.y - this.boss.y) < (p.type === 'fire' ? hitRadius * 1.2 : hitRadius));
-              if (isHit) { this.damageBoss(p); if (p.type !== 'beam') p.active = false; }
+              if (isHit) { 
+                  const bossY = this.boss.y; // שמירת המיקום לפני שהבוס עשוי להיעלם
+                  this.damageBoss(p); 
+                  p.hasHit = true;
+                  if (p.type === 'beam') {
+                      p.targetY = bossY + 100;
+                      p.life = Math.min(p.life, 5); // השארת הקרן גלויה לרגע
+                  } else {
+                      p.active = false; 
+                  }
+              }
           }
           if (p.y < -400 || p.y > this.height + 400) p.active = false;
       });
@@ -346,11 +368,29 @@ export class GameEngine {
           let hit = false;
           for (let j = 0; j < this.projectilePool.length; j++) {
               let p = this.projectilePool[j];
-              if (!p || !p.active) continue;
+              if (!p || !p.active || p.hasHit) continue; // אם כבר פגע, לא פוגע שוב
+              
               const hitTolerance = isMobile ? 2.2 : 1.6;
               const beamWidth = isMobile ? e.radius * 2.5 : e.radius * 2;
-              if (p.type === 'beam' ? (Math.abs(p.x - e.x) < beamWidth && e.y < p.y) : (Math.hypot(p.x - e.x, p.y - e.y) < (p.type === 'fire' ? e.radius*2.5 : e.radius*hitTolerance))) {
-                  hit = true; if (p.type !== 'beam') p.active = false; break;
+              
+              let isColliding = false;
+              if (p.type === 'beam') {
+                  // בדיקת קרן: האם האויב בטור של השחקן ומעליו
+                  isColliding = Math.abs(p.x - e.x) < beamWidth && e.y < p.y;
+              } else {
+                  isColliding = Math.hypot(p.x - e.x, p.y - e.y) < (p.type === 'fire' ? e.radius*2.5 : e.radius*hitTolerance);
+              }
+
+              if (isColliding) {
+                  hit = true; 
+                  p.hasHit = true; // סימון שפגע
+                  if (p.type === 'beam') {
+                      p.targetY = e.y; // הקרן נעצרת באויב
+                      p.life = 6; // הקרן נשארת גלויה ל-6 פריימים כדי שיראו את הפגיעה
+                  } else {
+                      p.active = false; 
+                  }
+                  break;
               }
           }
           if (hit) { e.active = false; this.handleHit(e.isCorrect, e.x, e.y); }
@@ -367,12 +407,14 @@ export class GameEngine {
           if (this.combo >= 10) this.onAchievement('zurba');
           this.enemyPool.forEach(e => e.active = false);
           this.hazards = [];
-          if (Math.random() < 0.35) {
-              const types = ['fire', 'electric', 'missile', 'beam', 'time_potion', 'bomb', 'life', 'shield_item'];
-              this.bonuses.push({x, y, type: types[Math.floor(Math.random() * types.length)]});
-          }
-          setTimeout(() => { this.level++; this.startRound(); }, 400);
-          this.onStatsUpdate({ score: this.score, combo: this.combo, level: this.level });
+          
+          this.onStatsUpdate({ score: this.score, combo: this.combo });
+          
+          setTimeout(() => {
+            this.subLevel++;
+            this.isTransitioning = false;
+            this.startRound();
+          }, 50); 
       } else {
           this.triggerShake(12); this.spawnExplosion(x, y, '#ef4444', 20); this.handleMiss();
       }
@@ -427,12 +469,6 @@ export class GameEngine {
       this.ctx.fillStyle = grad;
       this.ctx.fillRect(0,0,this.width,this.height);
       this.ctx.restore();
-    }
-    if (!this.playerExploding) {
-      this.ctx.fillStyle = 'rgba(255,255,255,0.3)';
-      this.ctx.font = '12px Rubik';
-      this.ctx.textAlign = 'center';
-      this.ctx.fillText(this.config.sugiaTitle || '', this.width/2, this.height - 20);
     }
   }
 
@@ -521,7 +557,6 @@ export class GameEngine {
   renderShip() {
       const skin = this.config.skin;
       const isMobile = this.width < 600;
-      // הקטנת המטוס במובייל מ-0.75 ל-0.55
       const scale = isMobile ? 0.55 : 0.75; 
       if (skin === 'skin_choshen') {
           this.ctx.save(); this.ctx.scale(scale, scale);
@@ -593,19 +628,23 @@ export class GameEngine {
       const isMobile = this.width < 600;
       this.ctx.save();
       if(p.type === 'beam') {
-          // הקטנת עובי הקרן במובייל ב-50%
           const scale = isMobile ? 0.5 : 1.0;
+          const endY = p.targetY;
           this.ctx.shadowBlur = 80 * scale; this.ctx.shadowColor = '#fbbf24';
           this.ctx.strokeStyle = 'rgba(251, 191, 36, 0.4)'; this.ctx.lineWidth = 70 * scale;
-          this.ctx.beginPath(); this.ctx.moveTo(p.x, p.y); this.ctx.lineTo(p.x, -100); this.ctx.stroke();
+          this.ctx.beginPath(); this.ctx.moveTo(p.x, p.y); this.ctx.lineTo(p.x, endY); this.ctx.stroke();
           this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)'; this.ctx.lineWidth = 35 * scale;
-          this.ctx.beginPath(); this.ctx.moveTo(p.x, p.y); this.ctx.lineTo(p.x, -100); this.ctx.stroke();
+          this.ctx.beginPath(); this.ctx.moveTo(p.x, p.y); this.ctx.lineTo(p.x, endY); this.ctx.stroke();
           this.ctx.shadowBlur = 40 * scale; this.ctx.shadowColor = '#fff';
           this.ctx.strokeStyle = '#fff'; this.ctx.lineWidth = 14 * scale;
-          this.ctx.beginPath(); this.ctx.moveTo(p.x, p.y); this.ctx.lineTo(p.x, -100); this.ctx.stroke();
-          this.ctx.fillStyle = '#fff'; this.ctx.beginPath(); this.ctx.arc(p.x, 100, 45 * scale, 0, Math.PI*2); this.ctx.fill();
+          this.ctx.beginPath(); this.ctx.moveTo(p.x, p.y); this.ctx.lineTo(p.x, endY); this.ctx.stroke();
+          this.ctx.fillStyle = '#fff'; this.ctx.beginPath(); this.ctx.arc(p.x, endY, 25 * scale, 0, Math.PI*2); this.ctx.fill();
       } else if (p.type === 'fire') {
-          this.ctx.translate(p.x, p.y); const rPulse = 35 + Math.sin(this.gameFrame * 0.4) * 12;
+          this.ctx.translate(p.x, p.y); 
+          const baseSize = isMobile ? 18 : 35;
+          const pulseRange = isMobile ? 6 : 12;
+          const rPulse = baseSize + Math.sin(this.gameFrame * 0.4) * pulseRange;
+          
           const fG = this.ctx.createRadialGradient(0,0,5,0,0,rPulse); fG.addColorStop(0, '#fff'); fG.addColorStop(0.3, '#fde68a'); fG.addColorStop(0.6, '#f97316'); fG.addColorStop(1, 'transparent');
           this.ctx.fillStyle = fG; this.ctx.shadowBlur = 30; this.ctx.shadowColor = '#f97316';
           this.ctx.beginPath(); this.ctx.arc(0, 0, rPulse, 0, Math.PI*2); this.ctx.fill();
@@ -631,7 +670,8 @@ export class GameEngine {
       b.timer = (b.timer || 0) + dt;
       if(b.timer >= b.attackRate) {
           b.timer = 0;
-          const typeIdx = ((Math.floor(this.level / 10) - 1) % 6) + 1;
+          const sugiaIdx = SUGIOT.findIndex(s => s.requiredLevel === this.level);
+          const typeIdx = (Math.max(0, sugiaIdx) % 6) + 1;
           if (typeIdx === 1) { 
               this.bossProjectiles.push({x: b.x - 120, y: b.y + 100, vy: 4.0, vx: 0});
               this.bossProjectiles.push({x: b.x + 120, y: b.y + 100, vy: 4.0, vx: 0});
@@ -661,10 +701,11 @@ export class GameEngine {
       const b = this.boss; if (!b) return;
       const isMobile = this.width < 600;
       this.ctx.save(); this.ctx.translate(b.x, b.y);
-      // הקטנת הבוסים במובייל ב-25%
       if (isMobile) this.ctx.scale(0.75, 0.75);
       
-      const typeIdx = ((Math.floor(this.level / 10) - 1) % 6) + 1;
+      const sugiaIdx = SUGIOT.findIndex(s => s.requiredLevel === this.level);
+      const typeIdx = (Math.max(0, sugiaIdx) % 6) + 1;
+      
       if (typeIdx === 1) this.drawTannina(); 
       else if (typeIdx === 2) this.drawKoy(); 
       else if (typeIdx === 3) this.drawShed();
@@ -722,7 +763,6 @@ export class GameEngine {
   drawBonus(b: any) { 
       this.ctx.save(); this.ctx.translate(b.x, b.y); const rot = this.gameFrame * 0.05; this.ctx.rotate(rot);
       const isMobile = this.width < 600;
-      // הקטנת הבונוסים במובייל ב-35%
       const scale = isMobile ? 0.65 : 1.0;
       this.ctx.scale(scale, scale);
 
@@ -744,7 +784,7 @@ export class GameEngine {
   }
 
   spawnBonus() { 
-      const types = ['coin', 'life', 'shield_item', 'points_star', 'time_potion', 'bomb'];
+      const types = ['coin', 'life', 'shield_item', 'points_star', 'time_potion', 'bomb', 'fire', 'electric', 'beam', 'missile'];
       this.bonuses.push({x: Math.random()*this.width, y: -50, type: types[Math.floor(Math.random() * types.length)]}); 
   }
 
@@ -760,7 +800,13 @@ export class GameEngine {
               else if (b.type === 'shield_item') { this.shields++; Sound.play('powerup'); this.onFeedback("+מגן!", true); }
               else if (b.type === 'bomb') { this.bombs++; Sound.play('powerup'); this.onFeedback("+פצצה!", true); }
               else if (b.type === 'time_potion') { this.potions++; Sound.play('powerup'); this.onFeedback("+שיקוי!", true); }
-              else { this.weaponType = b.type; this.weaponAmmo = 30; Sound.play('powerup'); this.onFeedback(`${b.type}!`, true); }
+              else if (['fire', 'electric', 'beam', 'missile'].includes(b.type)) {
+                this.weaponType = b.type;
+                this.weaponAmmo = 30;
+                Sound.play('powerup');
+                const labels: any = { fire: "אש!", electric: "חשמל!", beam: "קרן!", missile: "טילים!" };
+                this.onFeedback(labels[b.type] || b.type, true);
+              } else { this.weaponType = b.type; this.weaponAmmo = 30; Sound.play('powerup'); this.onFeedback(`${b.type}!`, true); }
               
               this.onStatsUpdate({ 
                   score: this.score, 
@@ -781,8 +827,10 @@ export class GameEngine {
       const p = this.projectilePool.find(pr => !pr.active);
       if (p) {
           p.x = this.player.x; p.y = this.player.y - 35; p.vx = 0; p.vy = -20; p.type = this.weaponType; p.active = true; p.angle = 0;
+          p.targetY = -100; // איפוס גובה הקרן
+          p.hasHit = false; // איפוס סטטוס פגיעה
           if (p.type === 'fire') { p.vy = -16; p.life = 45; }
-          if (p.type === 'beam') p.life = 10; 
+          if (p.type === 'beam') p.life = 30; // הגדלת זמן חיים בסיסי כדי שהיא תיראה
           if (p.type === 'electric') p.life = 25;
           if (p.type === 'missile') { p.vy = -10; p.vx = (Math.random()-0.5)*10; }
           if (this.config.skin === 'skin_default' || this.weaponAmmo < 9000) { if (this.weaponAmmo > 0) { this.weaponAmmo--; if (this.weaponAmmo === 0) { this.onFeedback("תחמושת נגמרה", false); this.applySkinWeapon(); } } }
@@ -794,16 +842,15 @@ export class GameEngine {
   useShield() { if(this.shields > 0 && this.shieldStrength < 2) { this.shields--; Sound.play('powerup'); this.shieldStrength = 2; this.onStatsUpdate({shields: this.shields, hasShield: true}); this.onFeedback("מגן!", true); } }
   usePotion() { if(this.potions > 0) { this.potions--; Sound.play('powerup'); this.timeSlowTimer = 450; this.onStatsUpdate({potions: this.potions}); this.onFeedback("זמן איטי!", true); } }
 
-  // מתודה חדשה לתנועה יחסית - מונעת קפיצות במגע ראשוני
   movePlayer(dx: number, dy: number) {
-      if (!this.isPaused) {
+      if (!this.isPaused && !this.isTransitioning) {
           this.player.x = Math.max(20, Math.min(this.width - 20, this.player.x + dx));
           this.player.y = Math.max(this.height * 0.4, Math.min(this.height - 100, this.player.y + dy));
       }
   }
 
   setPlayerPos(x: number, y: number) { 
-      if (!this.isPaused) { 
+      if (!this.isPaused && !this.isTransitioning) { 
           this.player.x = x; 
           this.player.y = Math.max(this.height * 0.4, Math.min(y, this.height - 100)); 
       } 
@@ -823,10 +870,31 @@ export class GameEngine {
       this.score += 10000; 
       this.boss = null; 
       this.bossProjectiles = []; 
-      this.level++; 
       this.triggerShake(50);
-      this.onStatsUpdate({bossActive: false, bossHpPercent: 0, score: this.score, level: this.level}); 
+      
+      this.onStatsUpdate({bossActive: false, bossHpPercent: 0, score: this.score}); 
       this.onFeedback("ניצחון!", true); 
-      setTimeout(() => this.startRound(), 3000);
+      
+      this.isTransitioning = true;
+      setTimeout(() => {
+        this.onUnitComplete({
+            score: this.score,
+            combo: this.combo,
+            subLevel: this.subLevel,
+            level: this.level
+        });
+      }, 1500);
+  }
+
+  nextUnit() {
+      const nextSugia = SUGIOT.find(s => s.requiredLevel > this.level);
+      if (nextSugia) {
+          this.level = nextSugia.requiredLevel;
+      } else {
+          this.level++;
+      }
+      this.subLevel = 1;
+      this.isTransitioning = false;
+      this.startRound();
   }
 }

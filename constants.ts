@@ -10,18 +10,18 @@ export const ACHIEVEMENTS: Achievement[] = [
 ];
 
 export const SUGIOT: Sugia[] = [
-  { id: 0, title: 'דף ב: (נהרדעא)', location: 'nehardea', description: 'זרימת הנהר - האויבים נעים בתנועה גלית.', requiredLevel: 1, modifier: 'wave' },
-  { id: 1, title: 'דף ב. (נהרדעא)', location: 'nehardea', description: 'עומק הדיון - צפיפות אויבים גדולה יותר.', requiredLevel: 8, modifier: 'density' },
-  { id: 2, title: 'דף ג: (סורא)', location: 'sura', description: 'אש התורה - היזהר מאותיות אש הנופלות מהשמיים.', requiredLevel: 15, modifier: 'hazards' },
-  { id: 3, title: 'דף ג. (סורא)', location: 'sura', description: 'לחץ הקושיא - האויבים מאיצים לקראתך.', requiredLevel: 22, modifier: 'accelerate' },
-  { id: 4, title: 'דף ד: (פומבדיתא)', location: 'pumbedita', description: 'חריפות פומבדיתא - מילים קטנות ומהירות במיוחד.', requiredLevel: 29, modifier: 'sharpness' },
-  { id: 5, title: 'דף ד. (פומבדיתא)', location: 'pumbedita', description: 'סערת הרוח - רוח צדדית משפיעה על תנועת המטוס.', requiredLevel: 36, modifier: 'drift' },
-  { id: 6, title: 'דף ה: (מחוזא)', location: 'mahoza', description: 'ספקות - האויבים מהבהבים ונעלמים מהעין.', requiredLevel: 43, modifier: 'blink' },
-  { id: 7, title: 'דף ה. (מחוזא)', location: 'mahoza', description: 'תוהו ובוהו - מסלולי תנועה קופצניים ולא צפויים.', requiredLevel: 50, modifier: 'chaos' },
-  { id: 8, title: 'דף ו: (מתא מחסיא)', location: 'matamehasia', description: 'עומקא דדינא - הראות מוגבלת רק לאזור המטוס.', requiredLevel: 57, modifier: 'darkness' },
-  { id: 9, title: 'דף ו. (מתא מחסיא)', location: 'matamehasia', description: 'מערבולת - האויבים נמשכים למרכז המסך.', requiredLevel: 64, modifier: 'vortex' },
-  { id: 10, title: 'דף ז: (בירא דלוות)', location: 'beiradelvat', description: 'סופת ברקים - רוחות חזקות ומכשולים רבים.', requiredLevel: 71, modifier: 'storm' },
-  { id: 11, title: 'דף ז. (בירא דלוות)', location: 'beiradelvat', description: 'סיום המסכת - שילוב של כל האתגרים לקרב האחרון.', requiredLevel: 78, modifier: 'final' }
+  { id: 0, title: 'דף ב: נהרדעא', location: 'nehardea', description: 'זרימת הנהר - האויבים נעים בתנועה גלית.', requiredLevel: 1, modifier: 'wave' },
+  { id: 1, title: 'דף ב. נהרדעא', location: 'nehardea', description: 'עומק הדיון - צפיפות אויבים גדולה יותר.', requiredLevel: 8, modifier: 'density' },
+  { id: 2, title: 'דף ג: סורא', location: 'sura', description: 'אש התורה - היזהר מאותיות אש הנופלות מהשמיים.', requiredLevel: 15, modifier: 'hazards' },
+  { id: 3, title: 'דף ג. סורא', location: 'sura', description: 'לחץ הקושיא - האויבים מאיצים לקראתך.', requiredLevel: 22, modifier: 'accelerate' },
+  { id: 4, title: 'דף ד: פומבדיתא', location: 'pumbedita', description: 'חריפות פומבדיתא - מילים קטנות ומהירות במיוחד.', requiredLevel: 29, modifier: 'sharpness' },
+  { id: 5, title: 'דף ד. פומבדיתא', location: 'pumbedita', description: 'סערת הרוח - רוח צדדית משפיעה על תנועת המטוס.', requiredLevel: 36, modifier: 'drift' },
+  { id: 6, title: 'דף ה: מחוזא', location: 'mahoza', description: 'ספקות - האויבים מהבהבים ונעלמים מהעין.', requiredLevel: 43, modifier: 'blink' },
+  { id: 7, title: 'דף ה. מחוזא', location: 'mahoza', description: 'תוהו ובוהו - מסלולי תנועה קופצניים ולא צפויים.', requiredLevel: 50, modifier: 'chaos' },
+  { id: 8, title: 'דף ו: מתא מחסיא', location: 'matamehasia', description: 'עומקא דדינא - הראות מוגבלת רק לאזור המטוס.', requiredLevel: 57, modifier: 'darkness' },
+  { id: 9, title: 'דף ו. מתא מחסיא', location: 'matamehasia', description: 'מערבולת - האויבים נמשכים למרכז המסך.', requiredLevel: 64, modifier: 'vortex' },
+  { id: 10, title: 'דף ז: בירא דלוות', location: 'beiradelvat', description: 'סופת ברקים - רוחות חזקות ומכשולים רבים.', requiredLevel: 71, modifier: 'storm' },
+  { id: 11, title: 'דף ז. בירא דלוות', location: 'beiradelvat', description: 'סיום המסכת - שילוב של כל האתגרים לקרב האחרון.', requiredLevel: 78, modifier: 'final' }
 ];
 
 export const SHOP_ITEMS: ShopItem[] = [

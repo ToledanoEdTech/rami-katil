@@ -64,6 +64,10 @@ function App() {
       category: 'common',
       skin: inventory.currentSkin
   });
+  
+  const [isUnitComplete, setIsUnitComplete] = useState(false);
+  const [transitionStats, setTransitionStats] = useState<any>(null);
+  
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [playerName, setPlayerName] = useState('');
@@ -133,6 +137,8 @@ function App() {
     engineRef.current = null;
     lastTimeRef.current = 0;
     setDisplayScore(0);
+    setIsUnitComplete(false);
+    
     setStats({
         score: 0, level: sugia ? sugia.requiredLevel : 1, lives: 3, combo: 0, coins: 0, 
         bombs: inventory.bombs, shields: inventory.shields, potions: inventory.potions,
@@ -187,6 +193,11 @@ function App() {
                     },
                     onAchievement: (id: string) => {
                         unlockAchievement(id);
+                    },
+                    onUnitComplete: (s: any) => {
+                        setTransitionStats(s);
+                        setIsUnitComplete(true);
+                        Sound.play('powerup');
                     }
                 }
             );
@@ -194,6 +205,14 @@ function App() {
             animationFrameId.current = requestAnimationFrame(gameLoop);
         }
     });
+  };
+
+  const proceedToNextSugia = () => {
+    if (engineRef.current) {
+      setIsUnitComplete(false);
+      engineRef.current.nextUnit();
+      Sound.play('ui_click');
+    }
   };
 
   const handleReturnToMenu = () => {
@@ -213,12 +232,11 @@ function App() {
       const handleResize = () => { if(engineRef.current) engineRef.current.resize(window.innerWidth, window.innerHeight); };
       
       const handleMove = (e: any) => {
-          if(!engineRef.current || gameState !== 'PLAYING' || isInputOnUI.current) return;
+          if(!engineRef.current || gameState !== 'PLAYING' || isInputOnUI.current || isUnitComplete) return;
           
           if (e.touches) {
               const touch = e.touches[0];
               if (lastTouchRef.current) {
-                  // חישוב תזוזה יחסית - מונע קפיצות במובייל
                   const dx = touch.clientX - lastTouchRef.current.x;
                   const dy = touch.clientY - lastTouchRef.current.y;
                   engineRef.current.movePlayer(dx, dy);
@@ -226,22 +244,18 @@ function App() {
               lastTouchRef.current = { x: touch.clientX, y: touch.clientY };
               e.preventDefault();
           } else {
-              // במחשב התנועה נשארת ישירה (עוקבת אחרי הסמן)
               engineRef.current.setPlayerPos(e.clientX, e.clientY);
           }
       };
 
       const handleTouchStart = (e: TouchEvent) => {
-          if(!engineRef.current || gameState !== 'PLAYING') return;
-          
-          // בדיקה האם המגע התחיל על כפתור - אם כן, נתעלם ממנו לצורכי תנועה
+          if(!engineRef.current || gameState !== 'PLAYING' || isUnitComplete) return;
           const target = e.target as HTMLElement;
           if (target.closest('button')) {
             isInputOnUI.current = true;
             lastTouchRef.current = null;
             return;
           }
-          
           isInputOnUI.current = false;
           lastTouchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
       };
@@ -252,7 +266,7 @@ function App() {
       };
 
       const handleInput = (e: any) => { 
-          if(!engineRef.current || e.target.closest('button') || isPaused || gameState !== 'PLAYING') return; 
+          if(!engineRef.current || e.target.closest('button') || isPaused || gameState !== 'PLAYING' || isUnitComplete) return; 
           if (!isMobile) {
             engineRef.current.fire(); 
           }
@@ -264,7 +278,7 @@ function App() {
               if (engineRef.current) { const paused = engineRef.current.togglePause(); setIsPaused(paused); Sound.play('ui_click'); }
               return;
           }
-          if(!engineRef.current || isPaused || gameState !== 'PLAYING') return;
+          if(!engineRef.current || isPaused || gameState !== 'PLAYING' || isUnitComplete) return;
           
           if(e.code === 'KeyA') engineRef.current.useBomb();
           if(e.code === 'KeyS') engineRef.current.useShield();
@@ -289,7 +303,7 @@ function App() {
           window.removeEventListener('mousedown', handleInput);
           window.removeEventListener('keydown', handleKey);
       };
-  }, [gameLoop, isPaused, gameState, isMobile]);
+  }, [gameLoop, isPaused, gameState, isMobile, isUnitComplete]);
 
   const buyItem = (item: ShopItem) => {
     if (item.requiredAchievement && !unlockedAchievements.includes(item.requiredAchievement)) {
@@ -339,6 +353,9 @@ const equipSkin = (id: string) => {
     </div>
   );
 
+  const nextSugia = transitionStats ? SUGIOT.find(s => s.requiredLevel > transitionStats.level) : null;
+  const currentSugia = transitionStats ? SUGIOT.find(s => s.requiredLevel === transitionStats.level) : null;
+
   return (
     <div className="relative w-full h-screen bg-slate-950 text-white overflow-hidden select-none font-rubik" dir="rtl" style={{ touchAction: 'none' }}>
       <canvas ref={canvasRef} className="block w-full h-full" />
@@ -365,7 +382,7 @@ const equipSkin = (id: string) => {
                       <GoldCoin size={18} /> {displayScore.toLocaleString()}
                     </div>
                     <div className="text-slate-400 text-[10px] md:text-xs font-bold mt-1 uppercase truncate max-w-[80px] md:max-w-none">{stats.sugiaTitle}</div>
-                    <div className="text-slate-500 text-[8px] md:text-[10px] font-bold uppercase">שלב {stats.level}</div>
+                    <div className="text-slate-500 text-[8px] md:text-[10px] font-bold uppercase">יחידה {stats.level} | שלב {stats.subLevel}/9</div>
                     {stats.weaponAmmo && stats.weaponAmmo > 0 && stats.weaponAmmo < 9000 && (
                         <div className="text-red-400 text-[10px] font-black mt-1">תחמושת: {stats.weaponAmmo}</div>
                     )}
@@ -398,14 +415,13 @@ const equipSkin = (id: string) => {
                 <div className="flex flex-col gap-4 items-center pointer-events-auto">
                     {isMobile && (
                       <button 
-                        onPointerDown={(e) => { e.preventDefault(); engineRef.current?.fire(); }}
-                        // הקטנת כפתור הירי במובייל מ-20 ל-16
+                        onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); engineRef.current?.fire(); }}
                         className="w-16 h-16 bg-red-600/30 rounded-full border-4 border-white/30 flex items-center justify-center text-3xl shadow-2xl active:scale-90 active:bg-red-600/50 backdrop-blur-sm"
                       >
                         🔥
                       </button>
                     )}
-                    <button onClick={() => { if (engineRef.current) { const paused = engineRef.current.togglePause(); setIsPaused(paused); Sound.play('ui_click'); } }}
+                    <button onClick={(e) => { e.stopPropagation(); if (engineRef.current) { const paused = engineRef.current.togglePause(); setIsPaused(paused); Sound.play('ui_click'); } }}
                        className="pointer-events-auto w-14 h-14 bg-slate-800/80 rounded-full flex items-center justify-center text-2xl border border-slate-600 active:scale-90">
                        ⏸️
                     </button>
@@ -414,11 +430,56 @@ const equipSkin = (id: string) => {
 
             {isPaused && (
                 <div className="absolute inset-0 bg-black/80 backdrop-blur-md pointer-events-auto flex flex-col items-center justify-center z-[100] p-6">
-                    <h2 className="text-5xl md:text-7xl font-black mb-6 drop-shadow-2xl">הפסקה</h2>
+                    <h2 className="text-5xl md:text-7xl font-black mb-6 drop-shadow-2xl text-white">הפסקה</h2>
                     <div className="flex flex-col gap-4 md:gap-6 w-full max-w-xs">
                         <button onClick={() => { engineRef.current?.togglePause(); setIsPaused(false); Sound.play('ui_click'); }} className="bg-blue-600 p-4 md:p-5 rounded-2xl text-xl md:text-2xl font-black shadow-xl active:scale-95 border-b-4 border-blue-900">המשך</button>
                         <button onClick={handleReturnToMenu} className="bg-slate-700 p-4 md:p-5 rounded-2xl text-xl md:text-2xl font-black shadow-xl active:scale-95 border-b-4 border-slate-900">תפריט ראשי</button>
                         <ControlsDisplay />
+                    </div>
+                </div>
+            )}
+
+            {isUnitComplete && transitionStats && (
+                <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-xl pointer-events-auto flex flex-col items-center justify-center z-[150] p-6 animate-fade-in">
+                    <div className="bg-slate-900/50 border-2 border-amber-500/30 p-8 md:p-12 rounded-[2rem] shadow-[0_0_50px_rgba(245,158,11,0.2)] text-center max-w-lg w-full">
+                        <h2 className="text-4xl md:text-6xl font-aramaic text-amber-500 mb-2">סיום יחידה!</h2>
+                        <p className="text-slate-400 text-lg md:text-2xl mb-8 font-bold">ניצחת את הבוס של {currentSugia?.title || `יחידה ${transitionStats.level}`}</p>
+                        
+                        <div className="grid grid-cols-2 gap-4 mb-8">
+                            <div className="bg-slate-800/50 p-4 rounded-2xl border border-slate-700">
+                                <div className="text-slate-500 text-xs font-bold uppercase mb-1">ניקוד מצטבר</div>
+                                <div className="text-2xl font-black text-amber-400">{transitionStats.score.toLocaleString()}</div>
+                            </div>
+                            <div className="bg-slate-800/50 p-4 rounded-2xl border border-slate-700">
+                                <div className="text-slate-500 text-xs font-bold uppercase mb-1">רצף (Combo)</div>
+                                <div className="text-2xl font-black text-blue-400">{transitionStats.combo}</div>
+                            </div>
+                        </div>
+
+                        <div className="mb-10 text-right bg-black/30 p-6 rounded-3xl border border-amber-500/10 shadow-inner">
+                            <div className="text-amber-500 font-black text-xs md:text-sm mb-3 uppercase tracking-[0.2em] border-b border-amber-500/20 pb-2">לקראת היחידה הבאה:</div>
+                            {nextSugia ? (
+                              <div className="flex flex-col gap-2">
+                                <div className="text-2xl md:text-3xl font-aramaic font-black text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]">
+                                  עלית רמה! <span className="text-amber-400">{nextSugia.title}</span>
+                                </div>
+                                <div className="text-lg md:text-xl text-slate-300 font-medium italic leading-relaxed">
+                                  {nextSugia.description}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="text-2xl font-aramaic font-black text-amber-400 text-center">
+                                כל הכבוד! סיימת את כל הסוגיות במסכת!
+                              </div>
+                            )}
+                        </div>
+
+                        <button 
+                            onClick={proceedToNextSugia} 
+                            className="w-full bg-gradient-to-r from-amber-600 to-yellow-500 p-5 rounded-2xl text-2xl font-black shadow-xl hover:scale-105 active:scale-95 transition-all border-b-4 border-amber-900 text-slate-950"
+                        >
+                            עבור לסוגיא הבאה
+                        </button>
                     </div>
                 </div>
             )}
@@ -479,9 +540,6 @@ const equipSkin = (id: string) => {
               </div>
           </div>
       )}
-
-      {/* Map, Shop, Leaderboard, Achievements screens... */}
-      {/* ... keeping other screens logic same but updating button sizes where applicable ... */}
 
       {gameState === 'MAP' && (
           <div className="absolute inset-0 bg-[#fbf3db] flex flex-col z-[50] overflow-hidden">
@@ -569,7 +627,6 @@ const equipSkin = (id: string) => {
           </div>
       )}
 
-      {/* Same for Leaderboard and Achievements... */}
       {gameState === 'LEADERBOARD' && (
           <div className="absolute inset-0 bg-slate-950/98 flex flex-col items-center p-4 md:p-8 z-20 overflow-y-auto">
               <div className="w-full max-w-4xl">
@@ -674,7 +731,6 @@ const AbilityButton = ({icon, count, color, onClick, label, shortcut}: {icon:str
     return (
         <div className="flex flex-col items-center gap-1 group pointer-events-auto">
           <button onClick={(e) => { e.stopPropagation(); Sound.play('ui_click'); onClick(); }} disabled={count <= 0}
-              // הקטנת כפתורי היכולות במובייל מ-14 ל-12
               className={`w-12 h-12 md:w-20 md:h-20 rounded-2xl flex items-center justify-center text-xl md:text-4xl relative shadow-2xl border-b-4 active:border-b-0 active:translate-y-1 transition-all text-white
               ${count > 0 ? bg : 'bg-slate-800 grayscale opacity-40 cursor-not-allowed'}`}>
               {icon}
