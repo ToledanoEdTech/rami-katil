@@ -19,6 +19,10 @@ const safeInt = (key: string, fallback: number) => {
   return val ? parseInt(val, 10) : fallback;
 };
 
+const removeNiqqud = (str: string) => {
+  return str.replace(/[\u0591-\u05C7]/g, '');
+};
+
 const GoldCoin = ({ size = 24 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="inline-block align-middle">
     <circle cx="12" cy="12" r="10" fill="#FBBF24" stroke="#B45309" strokeWidth="2"/>
@@ -41,6 +45,9 @@ function App() {
   
   // Teacher Mode State
   const [teacherSelectedIndices, setTeacherSelectedIndices] = useState<number[]>([]);
+  const [teacherSearchTerm, setTeacherSearchTerm] = useState('');
+  const [teacherAuthPass, setTeacherAuthPass] = useState('');
+  const [isTeacherAuthenticated, setIsTeacherAuthenticated] = useState(false);
   
   const [inventory, setInventory] = useState(() => ({
     bombs: safeInt('bombs', 1),
@@ -239,6 +246,9 @@ function App() {
     engineRef.current = null;
     Sound.play('ui_click');
     Sound.startMusic('menu');
+    setIsTeacherAuthenticated(false);
+    setTeacherAuthPass('');
+    setTeacherSearchTerm('');
     setGameState('MENU');
   };
 
@@ -406,8 +416,21 @@ const equipSkin = (id: string) => {
   const nextSugia = transitionStats ? SUGIOT.find(s => s.requiredLevel > transitionStats.level) : null;
   const currentSugia = transitionStats ? SUGIOT.find(s => s.requiredLevel === transitionStats.level) : null;
 
+  // Filter dictionary for teacher mode with niqqud normalization
+  const filteredTeacherDictionary = DICTIONARY.map((word, originalIndex) => ({ ...word, originalIndex }))
+    .filter(w => {
+      const search = teacherSearchTerm.toLowerCase();
+      const normalizedAramaic = removeNiqqud(w.aramaic).toLowerCase();
+      const rawAramaic = w.aramaic.toLowerCase();
+      const hebrew = w.hebrew.toLowerCase();
+      
+      return normalizedAramaic.includes(search) || 
+             rawAramaic.includes(search) || 
+             hebrew.includes(search);
+    });
+
   return (
-    <div className="relative w-full h-screen bg-slate-950 text-white overflow-hidden select-none font-rubik" dir="rtl" style={{ touchAction: 'none' }}>
+    <div className="relative w-full h-screen h-[100dvh] bg-slate-950 text-white overflow-hidden select-none font-rubik" dir="rtl" style={{ touchAction: 'none' }}>
       <canvas ref={canvasRef} className="block w-full h-full" />
       
       {unlockNotification && (
@@ -455,7 +478,7 @@ const equipSkin = (id: string) => {
                 </div>
             </div>
 
-            <div className="flex justify-between items-end w-full pb-8 md:pb-0">
+            <div className="flex justify-between items-end w-full pb-10 md:pb-0">
                 <div className="flex flex-col gap-4 md:gap-6 pointer-events-auto" data-ui="true">
                     <AbilityButton icon="💣" count={stats.bombs} color="red" onClick={() => engineRef.current?.useBomb()} label="פצצה" shortcut="A" />
                     <AbilityButton icon="🛡️" count={stats.shields} color="blue" onClick={() => engineRef.current?.useShield()} label="מגן" shortcut="S" />
@@ -473,7 +496,7 @@ const equipSkin = (id: string) => {
                       </button>
                     )}
                     <button onClick={(e) => { e.stopPropagation(); if (engineRef.current) { const paused = engineRef.current.togglePause(); setIsPaused(paused); Sound.play('ui_click'); } }}
-                       className="pointer-events-auto w-14 h-14 bg-slate-800/80 rounded-full flex items-center justify-center text-2xl border border-slate-600 active:scale-90">
+                       className="pointer-events-auto w-14 h-14 bg-slate-800/80 rounded-full flex items-center justify-center text-2xl border border-slate-600 active:scale-90 mb-2 md:mb-0">
                        ⏸️
                     </button>
                 </div>
@@ -545,7 +568,7 @@ const equipSkin = (id: string) => {
       )}
 
       {gameState === 'MENU' && (
-          <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=2000')] bg-cover bg-center flex items-center justify-center">
+          <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=2000')] bg-cover bg-center flex items-center justify-center h-full">
               <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-md"></div>
               <div className="relative z-10 flex flex-col items-center p-4 md:p-8 w-full max-w-xl text-center overflow-y-auto max-h-full scrollbar-hide">
                   <h1 className="font-aramaic text-5xl md:text-9xl bg-gradient-to-b from-amber-200 via-yellow-400 to-amber-700 bg-clip-text text-transparent drop-shadow-[0_10px_10px_rgba(0,0,0,0.5)] mb-1 md:mb-4 animate-bounce-slow">
@@ -553,7 +576,7 @@ const equipSkin = (id: string) => {
                   </h1>
                   <p className="text-slate-300 mb-4 md:mb-8 text-sm md:text-2xl font-light tracking-widest border-b border-amber-500/30 pb-2 uppercase">אלוף הארמית - גרסת הקרב</p>
                   
-                  <div className="flex flex-col gap-4 md:gap-6 w-full px-2 md:px-4">
+                  <div className="flex flex-col gap-4 md:gap-6 w-full px-2 md:px-4 mb-4">
                       {customWordList ? (
                         <div className="bg-amber-600/20 border border-amber-500 p-3 rounded-xl mb-2">
                            <p className="text-amber-400 font-bold text-sm md:text-lg">נבחר שיעור מורה ({customWordList.length} מילים)</p>
@@ -602,21 +625,58 @@ const equipSkin = (id: string) => {
           </div>
       )}
 
-      {gameState === 'TEACHER' && (
-          <div className="absolute inset-0 bg-slate-950 flex flex-col z-[100] p-4 md:p-8 overflow-hidden">
+      {gameState === 'TEACHER' && !isTeacherAuthenticated && (
+          <div className="absolute inset-0 bg-slate-950 flex flex-col items-center justify-center p-6 z-[100] h-full">
+              <div className="bg-slate-900 p-8 rounded-3xl border border-slate-700 shadow-2xl max-w-sm w-full text-center">
+                  <h2 className="text-3xl font-aramaic text-blue-400 mb-6">כניסת מורה</h2>
+                  <input 
+                      type="password" 
+                      placeholder="הכנס קוד גישה" 
+                      value={teacherAuthPass}
+                      onChange={e => setTeacherAuthPass(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl p-4 text-center text-white mb-6 outline-none focus:border-blue-500 transition-colors"
+                  />
+                  <div className="flex gap-4">
+                      <button onClick={() => {
+                          if(teacherAuthPass === '123123') {
+                              setIsTeacherAuthenticated(true);
+                              Sound.play('powerup');
+                          } else {
+                              alert('קוד שגוי!');
+                              setTeacherAuthPass('');
+                          }
+                      }} className="flex-1 bg-blue-600 p-4 rounded-xl font-black">כניסה</button>
+                      <button onClick={handleReturnToMenu} className="flex-1 bg-slate-800 p-4 rounded-xl font-black">ביטול</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {gameState === 'TEACHER' && isTeacherAuthenticated && (
+          <div className="absolute inset-0 bg-slate-950 flex flex-col z-[100] p-4 md:p-8 overflow-hidden h-full">
               <div className="max-w-4xl w-full mx-auto flex flex-col h-full">
-                  <div className="flex justify-between items-center mb-6 md:mb-10 border-b border-slate-800 pb-4">
+                  <div className="flex justify-between items-center mb-6 md:mb-8 border-b border-slate-800 pb-4">
                       <button onClick={handleReturnToMenu} className="bg-slate-800 px-4 py-2 md:px-8 md:py-3 rounded-xl font-bold text-xs md:text-lg">חזור</button>
                       <h2 className="text-2xl md:text-6xl font-aramaic text-blue-400 font-black">ממשק מורה</h2>
+                  </div>
+
+                  <div className="mb-4">
+                      <input 
+                          type="text" 
+                          placeholder="🔍 חפש מילה בארמית (גם ללא ניקוד) או תרגום..." 
+                          value={teacherSearchTerm}
+                          onChange={e => setTeacherSearchTerm(e.target.value)}
+                          className="w-full bg-slate-900/80 border border-slate-700 rounded-2xl p-4 text-white outline-none focus:border-blue-500 backdrop-blur-md"
+                      />
                   </div>
 
                   <div className="flex-1 overflow-y-auto mb-6 bg-slate-900/40 rounded-3xl border border-slate-800 p-4 md:p-8 scrollbar-hide">
                       <p className="text-slate-400 text-sm md:text-xl mb-6 text-center">בחר את המילים שיופיעו בשיעור:</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 md:gap-4">
-                          {DICTIONARY.map((word, idx) => {
-                              const isSelected = teacherSelectedIndices.includes(idx);
+                          {filteredTeacherDictionary.map((word) => {
+                              const isSelected = teacherSelectedIndices.includes(word.originalIndex);
                               return (
-                                  <div key={idx} onClick={() => toggleTeacherWordSelection(idx)}
+                                  <div key={word.originalIndex} onClick={() => toggleTeacherWordSelection(word.originalIndex)}
                                     className={`p-3 md:p-5 rounded-2xl border-2 flex justify-between items-center transition-all cursor-pointer group
                                         ${isSelected ? 'border-blue-500 bg-blue-900/30' : 'border-slate-800 bg-slate-900/50 hover:border-slate-600'}
                                     `}>
@@ -630,10 +690,13 @@ const equipSkin = (id: string) => {
                                   </div>
                               );
                           })}
+                          {filteredTeacherDictionary.length === 0 && (
+                              <div className="col-span-full py-12 text-center text-slate-500 text-xl font-bold">לא נמצאו מילים תואמות לחיפוש</div>
+                          )}
                       </div>
                   </div>
 
-                  <div className="bg-slate-900/80 p-4 md:p-8 rounded-3xl border-t-4 border-blue-500 shadow-2xl animate-slide-up">
+                  <div className="bg-slate-900/80 p-4 md:p-8 rounded-3xl border-t-4 border-blue-500 shadow-2xl animate-slide-up mb-2">
                       <div className="flex flex-col md:flex-row items-center justify-between gap-4">
                           <div className="text-right">
                               <div className="text-white font-black text-lg md:text-3xl">נבחרו {teacherSelectedIndices.length} מילים</div>
@@ -649,7 +712,7 @@ const equipSkin = (id: string) => {
       )}
 
       {gameState === 'MAP' && (
-          <div className="absolute inset-0 bg-[#fbf3db] flex flex-col z-[50] overflow-hidden">
+          <div className="absolute inset-0 bg-[#fbf3db] flex flex-col z-[50] overflow-hidden h-full">
               <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/parchment.png')]"></div>
               <div className="absolute inset-0 border-[10px] md:border-[30px] border-amber-900/10 pointer-events-none"></div>
 
@@ -687,7 +750,7 @@ const equipSkin = (id: string) => {
               </div>
 
               {selectedSugia && (
-                  <div className="bg-white/95 backdrop-blur-lg p-3 md:p-10 border-t-4 md:border-t-8 border-amber-900/40 flex flex-col md:flex-row items-center justify-between z-20 shadow-[0_-10px_30px_rgba(0,0,0,0.15)] animate-slide-up gap-2 md:gap-4 pb-6 md:pb-10">
+                  <div className="bg-white/95 backdrop-blur-lg p-3 md:p-10 border-t-4 md:border-t-8 border-amber-900/40 flex flex-col md:flex-row items-center justify-between z-20 shadow-[0_-10px_30px_rgba(0,0,0,0.15)] animate-slide-up gap-2 md:gap-4 pb-10 md:pb-10">
                       <div className="text-right w-full md:w-auto">
                           <h3 className="text-lg md:text-4xl font-black text-amber-900 mb-0 font-aramaic">{selectedSugia.title}</h3>
                           <p className="text-xs md:text-xl text-amber-800/70 italic max-w-2xl line-clamp-1 md:line-clamp-none">{selectedSugia.description}</p>
@@ -699,7 +762,7 @@ const equipSkin = (id: string) => {
       )}
 
       {gameState === 'SHOP' && (
-          <div className="absolute inset-0 bg-slate-950/95 flex flex-col items-center p-4 md:p-8 z-20 overflow-y-auto scrollbar-hide">
+          <div className="absolute inset-0 bg-slate-950/95 flex flex-col items-center p-4 md:p-8 z-20 overflow-y-auto scrollbar-hide h-full">
               <div className="w-full max-w-5xl">
                 <div className="flex flex-col md:flex-row justify-between items-center mb-6 md:mb-12 border-b border-slate-800 pb-4 md:pb-6 gap-4">
                   <h2 className="text-3xl md:text-6xl font-aramaic text-amber-500 drop-shadow-lg">חנות הציוד</h2>
@@ -729,13 +792,13 @@ const equipSkin = (id: string) => {
                         );
                     })}
                 </div>
-                <button onClick={handleReturnToMenu} className="bg-slate-700 px-10 md:px-16 py-3 md:py-4 rounded-xl md:rounded-2xl text-lg md:text-2xl font-black mx-auto block mb-8">חזור</button>
+                <button onClick={handleReturnToMenu} className="bg-slate-700 px-10 md:px-16 py-3 md:py-4 rounded-xl md:rounded-2xl text-lg md:text-2xl font-black mx-auto block mb-12">חזור</button>
               </div>
           </div>
       )}
 
       {gameState === 'LEADERBOARD' && (
-          <div className="absolute inset-0 bg-slate-950/98 flex flex-col items-center p-4 md:p-8 z-20 overflow-y-auto scrollbar-hide">
+          <div className="absolute inset-0 bg-slate-950/98 flex flex-col items-center p-4 md:p-8 z-20 overflow-y-auto scrollbar-hide h-full">
               <div className="w-full max-w-4xl">
                   <h2 className="text-3xl md:text-7xl font-aramaic text-amber-500 text-center mb-6 md:mb-12">טבלת האלופים</h2>
                   {loading ? (
@@ -766,13 +829,13 @@ const equipSkin = (id: string) => {
                           </table>
                       </div>
                   )}
-                  <button onClick={handleReturnToMenu} className="bg-slate-700 px-10 md:px-16 py-3 md:py-4 rounded-xl md:rounded-2xl text-lg md:text-2xl font-black mx-auto block mb-8">חזור</button>
+                  <button onClick={handleReturnToMenu} className="bg-slate-700 px-10 md:px-16 py-3 md:py-4 rounded-xl md:rounded-2xl text-lg md:text-2xl font-black mx-auto block mb-12">חזור</button>
               </div>
           </div>
       )}
 
       {gameState === 'ACHIEVEMENTS' && (
-          <div className="absolute inset-0 bg-slate-950/95 flex flex-col items-center p-4 md:p-8 z-20 overflow-y-auto scrollbar-hide">
+          <div className="absolute inset-0 bg-slate-950/95 flex flex-col items-center p-4 md:p-8 z-20 overflow-y-auto scrollbar-hide h-full">
               <div className="w-full max-w-4xl">
                   <h2 className="text-3xl md:text-7xl font-aramaic text-purple-400 text-center mb-6 md:mb-12">הישגים תורניים</h2>
                   <div className="space-y-3 md:space-y-6 mb-8 md:mb-12">
@@ -783,6 +846,7 @@ const equipSkin = (id: string) => {
                                   <div className="text-3xl md:text-8xl">{ach.icon}</div>
                                   <div className="text-right flex-1">
                                       <h3 className="text-sm md:text-4xl font-black text-white mb-0.5 md:mb-1">{ach.title}</h3>
+                                      <h3 className="text-sm md:text-4xl font-black text-white mb-0.5 md:mb-1">{ach.title}</h3>
                                       <p className="text-[10px] md:text-xl text-slate-400 line-clamp-2 md:line-clamp-none">{ach.desc}</p>
                                   </div>
                                   {unlocked && <div className="text-green-400 font-black text-[10px] md:text-lg">הושלם!</div>}
@@ -790,13 +854,13 @@ const equipSkin = (id: string) => {
                           );
                       })}
                   </div>
-                  <button onClick={handleReturnToMenu} className="bg-slate-700 px-10 md:px-16 py-3 md:py-4 rounded-xl md:rounded-2xl text-lg md:text-2xl font-black mx-auto block mb-8">חזור</button>
+                  <button onClick={handleReturnToMenu} className="bg-slate-700 px-10 md:px-16 py-3 md:py-4 rounded-xl md:rounded-2xl text-lg md:text-2xl font-black mx-auto block mb-12">חזור</button>
               </div>
           </div>
       )}
 
       {gameState === 'GAMEOVER' && (
-          <div className="absolute inset-0 bg-slate-950/98 flex flex-col items-center justify-start pt-10 md:justify-center p-4 md:p-8 z-30 overflow-y-auto scrollbar-hide">
+          <div className="absolute inset-0 bg-slate-950/98 flex flex-col items-center justify-start pt-10 md:justify-center p-4 md:p-8 z-30 overflow-y-auto scrollbar-hide h-full">
               <h2 className="text-4xl md:text-8xl text-red-600 font-black mb-3 md:mb-4 font-aramaic drop-shadow-[0_0_20px_rgba(220,38,38,0.3)]">המשחק נגמר</h2>
               <div className="text-xl md:text-4xl text-amber-500 font-black mb-6 md:mb-12 bg-slate-900 px-6 py-2 md:px-12 md:py-5 rounded-2xl md:rounded-3xl border-2 border-amber-600/30 shadow-2xl flex items-center gap-2 md:gap-4">
                 ניקוד: {stats.score.toLocaleString()} <GoldCoin size={24} />
@@ -817,7 +881,7 @@ const equipSkin = (id: string) => {
                     </button>
                   </div>
               </div>
-              <div className="flex gap-2 md:gap-4 w-full max-w-md pb-10 md:pb-0">
+              <div className="flex gap-2 md:gap-4 w-full max-w-md pb-12 md:pb-0">
                   <button onClick={() => startGame(selectedSugia || undefined)} className="flex-1 bg-blue-600 px-3 py-3 md:px-8 md:py-5 rounded-xl md:rounded-2xl font-black text-sm md:text-xl transition-all shadow-lg active:scale-95">שוב</button>
                   <button onClick={() => {
                       if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
