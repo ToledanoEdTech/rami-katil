@@ -1,7 +1,7 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { GameState, GameStats, LeaderboardEntry, ShopItem, Achievement, Sugia } from './types';
-import { SHOP_ITEMS, SCRIPT_URL, ACHIEVEMENTS, SUGIOT } from './constants';
+import { GameState, GameStats, LeaderboardEntry, ShopItem, Achievement, Sugia, Word } from './types';
+import { SHOP_ITEMS, SCRIPT_URL, ACHIEVEMENTS, SUGIOT, DICTIONARY } from './constants';
 import { Sound } from './utils/sound';
 import { GameEngine, GameConfig } from './game/GameEngine';
 
@@ -37,6 +37,10 @@ function App() {
   const [maxLevelReached, setMaxLevelReached] = useState(() => safeInt('maxLevel', 1));
   const [selectedSugia, setSelectedSugia] = useState<Sugia | null>(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [customWordList, setCustomWordList] = useState<Word[] | null>(null);
+  
+  // Teacher Mode State
+  const [teacherSelectedIndices, setTeacherSelectedIndices] = useState<number[]>([]);
   
   const [inventory, setInventory] = useState(() => ({
     bombs: safeInt('bombs', 1),
@@ -73,7 +77,20 @@ function App() {
   const [playerName, setPlayerName] = useState('');
   const [playerClass, setPlayerClass] = useState('');
 
+  // Check for Teacher Mode Link on mount
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const wordParam = params.get('w');
+    if (wordParam) {
+      const indices = wordParam.split(',').map(Number).filter(n => !isNaN(n));
+      const filtered = indices.map(i => DICTIONARY[i]).filter(Boolean);
+      if (filtered.length > 0) {
+        setCustomWordList(filtered);
+        setFeedback({ msg: "נבחר מילון מורה!", isGood: true });
+        setTimeout(() => setFeedback(null), 3000);
+      }
+    }
+    
     Sound.init();
     const checkMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     setIsMobile(checkMobile);
@@ -144,7 +161,7 @@ function App() {
         score: 0, level: sugia ? sugia.requiredLevel : 1, lives: 3, combo: 0, coins: 0, 
         bombs: inventory.bombs, shields: inventory.shields, potions: inventory.potions,
         hasShield: false, bossActive: false, bossHpPercent: 0, currentWord: 'מתחיל...', weaponAmmo: 0,
-        sugiaTitle: sugia?.title || 'פתיחת הסוגיא'
+        sugiaTitle: sugia?.title || (customWordList ? 'תרגול מורה' : 'פתיחת הסוגיא')
     });
     
     Sound.resume();
@@ -165,7 +182,8 @@ function App() {
                   skin: inventory.currentSkin, 
                   location: sugia?.location || 'nehardea',
                   modifier: sugia?.modifier || 'wave',
-                  sugiaTitle: sugia?.title || 'פתיחת הסוגיא'
+                  sugiaTitle: sugia?.title || (customWordList ? 'תרגול מורה' : 'פתיחת הסוגיא'),
+                  customDictionary: customWordList || undefined
                 },
                 { bombs: inventory.bombs, shields: inventory.shields, potions: inventory.potions },
                 {
@@ -227,6 +245,31 @@ function App() {
   const navigateTo = (state: GameState) => {
     Sound.play('ui_click');
     setGameState(state);
+  };
+
+  // Teacher Mode Helpers
+  const generateTeacherLink = () => {
+    if (teacherSelectedIndices.length === 0) {
+      alert("נא לבחור לפחות מילה אחת לשיעור");
+      return;
+    }
+    const baseUrl = window.location.origin + window.location.pathname;
+    const link = `${baseUrl}?w=${teacherSelectedIndices.join(',')}`;
+    
+    // Copy to clipboard
+    navigator.clipboard.writeText(link).then(() => {
+      alert("הקישור הועתק ללוח! שתף אותו עם התלמידים.");
+      handleReturnToMenu();
+    }).catch(err => {
+      prompt("העתק את הקישור לשיעור:", link);
+    });
+  };
+
+  const toggleTeacherWordSelection = (idx: number) => {
+    setTeacherSelectedIndices(prev => 
+      prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx]
+    );
+    Sound.play('ui_click');
   };
 
   useEffect(() => {
@@ -511,38 +554,94 @@ const equipSkin = (id: string) => {
                   <p className="text-slate-300 mb-4 md:mb-8 text-sm md:text-2xl font-light tracking-widest border-b border-amber-500/30 pb-2 uppercase">אלוף הארמית - גרסת הקרב</p>
                   
                   <div className="flex flex-col gap-4 md:gap-6 w-full px-2 md:px-4">
-                      <div className="grid grid-cols-2 gap-2 md:gap-4">
-                        <div className="flex flex-col gap-1 text-right">
-                          <label className="text-slate-500 text-[10px] md:text-xs font-bold mr-2">רמת קושי</label>
-                          <select className="bg-slate-900 border border-slate-700 p-2 md:p-3 rounded-xl text-xs md:text-lg text-white outline-none"
-                            value={config.difficulty} onChange={e => { setConfig({...config, difficulty: e.target.value as any}); Sound.play('ui_click'); }}>
-                              <option value="easy">🌟 קל</option>
-                              <option value="medium">🔥🔥 בינוני</option>
-                              <option value="hard">⚡⚡⚡ קשה</option>
-                          </select>
+                      {customWordList ? (
+                        <div className="bg-amber-600/20 border border-amber-500 p-3 rounded-xl mb-2">
+                           <p className="text-amber-400 font-bold text-sm md:text-lg">נבחר שיעור מורה ({customWordList.length} מילים)</p>
+                           <button onClick={() => { setCustomWordList(null); window.history.replaceState({}, '', window.location.pathname); }} className="text-xs text-white underline mt-1">חזור למילון רגיל</button>
                         </div>
-                        <div className="flex flex-col gap-1 text-right">
-                          <label className="text-slate-500 text-[10px] md:text-xs font-bold mr-2">קטגוריית מילים</label>
-                          <select className="bg-slate-900 border border-slate-700 p-2 md:p-3 rounded-xl text-xs md:text-lg text-white outline-none"
-                            value={config.category} onChange={e => { setConfig({...config, category: e.target.value as any}); Sound.play('ui_click'); }}>
-                              <option value="common">📖 מילים נפוצות</option>
-                              <option value="berachot">🍷 מסכת ברכות</option>
-                              <option value="bava_kamma">⚖️ מסכת בבא קמא</option>
-                          </select>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-2 md:gap-4">
+                          <div className="flex flex-col gap-1 text-right">
+                            <label className="text-slate-500 text-[10px] md:text-xs font-bold mr-2">רמת קושי</label>
+                            <select className="bg-slate-900 border border-slate-700 p-2 md:p-3 rounded-xl text-xs md:text-lg text-white outline-none"
+                              value={config.difficulty} onChange={e => { setConfig({...config, difficulty: e.target.value as any}); Sound.play('ui_click'); }}>
+                                <option value="easy">🌟 קל</option>
+                                <option value="medium">🔥🔥 בינוני</option>
+                                <option value="hard">⚡⚡⚡ קשה</option>
+                            </select>
+                          </div>
+                          <div className="flex flex-col gap-1 text-right">
+                            <label className="text-slate-500 text-[10px] md:text-xs font-bold mr-2">קטגוריית מילים</label>
+                            <select className="bg-slate-900 border border-slate-700 p-2 md:p-3 rounded-xl text-xs md:text-lg text-white outline-none"
+                              value={config.category} onChange={e => { setConfig({...config, category: e.target.value as any}); Sound.play('ui_click'); }}>
+                                <option value="common">📖 מילים נפוצות</option>
+                                <option value="berachot">🍷 מסכת ברכות</option>
+                                <option value="bava_kamma">⚖️ מסכת בבא קמא</option>
+                            </select>
+                          </div>
                         </div>
-                      </div>
+                      )}
 
                       <button onClick={() => navigateTo('MAP')} className="group relative bg-gradient-to-r from-amber-700 to-amber-500 p-4 md:p-6 rounded-2xl text-xl md:text-4xl font-black shadow-[0_0_30px_rgba(251,191,36,0.4)] hover:scale-105 transition-all border-b-4 border-amber-900 active:translate-y-1 active:border-b-0 overflow-hidden">
                           נתיב הסוגיות
                       </button>
-                      <div className="grid grid-cols-3 gap-2 md:gap-4">
+                      <div className="grid grid-cols-2 gap-2 md:gap-4">
                           <button onClick={() => navigateTo('SHOP')} className="bg-slate-800/80 p-2 md:p-5 rounded-xl border border-slate-700 text-xs md:text-xl font-bold transition-all shadow-lg">🛒 חנות</button>
                           <button onClick={() => { fetchLeaderboard(); navigateTo('LEADERBOARD'); }} className="bg-amber-800/80 p-2 md:p-5 rounded-xl border border-amber-700 text-xs md:text-xl font-bold transition-all shadow-lg">🏆 אלופים</button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 md:gap-4">
                           <button onClick={() => navigateTo('ACHIEVEMENTS')} className="bg-purple-800/80 p-2 md:p-5 rounded-xl border border-purple-700 text-xs md:text-xl font-bold transition-all shadow-lg">📜 הישגים</button>
+                          <button onClick={() => navigateTo('TEACHER')} className="bg-blue-800/80 p-2 md:p-5 rounded-xl border border-blue-700 text-xs md:text-xl font-bold transition-all shadow-lg flex items-center justify-center gap-2">🎓 מצב מורה</button>
                       </div>
                       
                       <div className="hidden md:block">
                         <ControlsDisplay />
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {gameState === 'TEACHER' && (
+          <div className="absolute inset-0 bg-slate-950 flex flex-col z-[100] p-4 md:p-8 overflow-hidden">
+              <div className="max-w-4xl w-full mx-auto flex flex-col h-full">
+                  <div className="flex justify-between items-center mb-6 md:mb-10 border-b border-slate-800 pb-4">
+                      <button onClick={handleReturnToMenu} className="bg-slate-800 px-4 py-2 md:px-8 md:py-3 rounded-xl font-bold text-xs md:text-lg">חזור</button>
+                      <h2 className="text-2xl md:text-6xl font-aramaic text-blue-400 font-black">ממשק מורה</h2>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto mb-6 bg-slate-900/40 rounded-3xl border border-slate-800 p-4 md:p-8 scrollbar-hide">
+                      <p className="text-slate-400 text-sm md:text-xl mb-6 text-center">בחר את המילים שיופיעו בשיעור:</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 md:gap-4">
+                          {DICTIONARY.map((word, idx) => {
+                              const isSelected = teacherSelectedIndices.includes(idx);
+                              return (
+                                  <div key={idx} onClick={() => toggleTeacherWordSelection(idx)}
+                                    className={`p-3 md:p-5 rounded-2xl border-2 flex justify-between items-center transition-all cursor-pointer group
+                                        ${isSelected ? 'border-blue-500 bg-blue-900/30' : 'border-slate-800 bg-slate-900/50 hover:border-slate-600'}
+                                    `}>
+                                      <div className="text-right">
+                                          <div className="font-aramaic text-lg md:text-3xl text-white">{word.aramaic}</div>
+                                          <div className="text-[10px] md:text-sm text-slate-500 font-bold">{word.hebrew}</div>
+                                      </div>
+                                      <div className={`w-6 h-6 md:w-8 md:h-8 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-blue-500 border-blue-500' : 'border-slate-700'}`}>
+                                          {isSelected && <span className="text-white text-xs md:text-lg">✓</span>}
+                                      </div>
+                                  </div>
+                              );
+                          })}
+                      </div>
+                  </div>
+
+                  <div className="bg-slate-900/80 p-4 md:p-8 rounded-3xl border-t-4 border-blue-500 shadow-2xl animate-slide-up">
+                      <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+                          <div className="text-right">
+                              <div className="text-white font-black text-lg md:text-3xl">נבחרו {teacherSelectedIndices.length} מילים</div>
+                              <div className="text-slate-400 text-xs md:text-lg">לחץ על הכפתור כדי להעתיק את הקישור לשיעור</div>
+                          </div>
+                          <button onClick={generateTeacherLink} className="w-full md:w-auto bg-blue-600 hover:bg-blue-500 px-10 py-4 md:px-20 md:py-6 rounded-2xl text-xl md:text-4xl font-black shadow-xl active:scale-95 border-b-4 md:border-b-8 border-blue-900 transition-all">
+                              צור קישור והעתק ללוח
+                          </button>
                       </div>
                   </div>
               </div>
@@ -563,14 +662,14 @@ const equipSkin = (id: string) => {
               <div className="flex-1 relative flex items-center justify-start p-4 md:p-12 overflow-x-auto overflow-y-hidden scrollbar-hide">
                   <div className="flex gap-8 md:gap-20 px-8 md:px-24 relative min-w-max pb-8">
                       {SUGIOT.map((sugia, idx) => {
-                          const isUnlocked = maxLevelReached >= sugia.requiredLevel;
+                          const isUnlocked = customWordList ? true : (maxLevelReached >= sugia.requiredLevel);
                           const isSelected = selectedSugia?.id === sugia.id;
                           const dafLabel = sugia.title.split(' ')[0] + ' ' + sugia.title.split(' ')[1];
 
                           return (
                               <div key={sugia.id} className="relative group flex flex-col items-center">
                                   {idx < SUGIOT.length - 1 && (
-                                    <div className={`absolute top-12 md:top-24 left-[5rem] md:left-[10rem] w-8 md:w-20 h-1 ${maxLevelReached >= SUGIOT[idx+1].requiredLevel ? 'bg-amber-600' : 'bg-amber-900/10'}`}></div>
+                                    <div className={`absolute top-12 md:top-24 left-[5rem] md:left-[10rem] w-8 md:w-20 h-1 ${customWordList || maxLevelReached >= SUGIOT[idx+1].requiredLevel ? 'bg-amber-600' : 'bg-amber-900/10'}`}></div>
                                   )}
 
                                   <div onClick={() => { if(isUnlocked) { Sound.play('ui_click'); setSelectedSugia(sugia); } }}

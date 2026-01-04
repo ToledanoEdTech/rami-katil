@@ -10,6 +10,7 @@ export interface GameConfig {
   location?: string;
   modifier?: SugiaModifier;
   sugiaTitle?: string;
+  customDictionary?: Word[];
 }
 
 class Particle {
@@ -118,7 +119,12 @@ export class GameEngine {
     const pH = isMobile ? 18 : 24;
     this.player = { x: this.width / 2, y: this.height - (isMobile ? 180 : 150), width: pW, height: pH, isHit: false };
     
-    this.activeDictionary = DICTIONARY.filter(w => w.cat === config.category);
+    if (config.customDictionary && config.customDictionary.length > 0) {
+      this.activeDictionary = config.customDictionary;
+    } else {
+      this.activeDictionary = DICTIONARY.filter(w => w.cat === config.category);
+    }
+    
     if (this.activeDictionary.length === 0) this.activeDictionary = [...DICTIONARY];
     
     this.currentDeck = [...this.activeDictionary];
@@ -187,7 +193,7 @@ export class GameEngine {
       level: this.level, 
       subLevel: this.subLevel,
       weaponAmmo: this.weaponAmmo,
-      sugiaTitle: currentSugia.title
+      sugiaTitle: this.config.customDictionary ? 'תרגול מורה' : currentSugia.title
     });
 
     const isMobile = this.width < 600;
