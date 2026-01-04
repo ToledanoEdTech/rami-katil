@@ -75,7 +75,8 @@ function App() {
 
   useEffect(() => {
     Sound.init();
-    setIsMobile(/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
+    const checkMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    setIsMobile(checkMobile);
     if (gameState === 'MENU') {
       Sound.startMusic('menu');
     }
@@ -242,7 +243,7 @@ function App() {
                   engineRef.current.movePlayer(dx, dy);
               }
               lastTouchRef.current = { x: touch.clientX, y: touch.clientY };
-              e.preventDefault();
+              if (e.cancelable) e.preventDefault();
           } else {
               engineRef.current.setPlayerPos(e.clientX, e.clientY);
           }
@@ -250,23 +251,29 @@ function App() {
 
       const handleTouchStart = (e: TouchEvent) => {
           if(!engineRef.current || gameState !== 'PLAYING' || isUnitComplete) return;
+          
+          // בדיקה האם המגע התחיל על אלמנט UI
           const target = e.target as HTMLElement;
-          if (target.closest('button')) {
+          if (target.closest('[data-ui="true"]')) {
             isInputOnUI.current = true;
-            lastTouchRef.current = null;
             return;
           }
+
           isInputOnUI.current = false;
           lastTouchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
       };
 
-      const handleTouchEnd = () => {
+      const handleTouchEnd = (e: TouchEvent) => {
           lastTouchRef.current = null;
           isInputOnUI.current = false;
       };
 
       const handleInput = (e: any) => { 
-          if(!engineRef.current || e.target.closest('button') || isPaused || gameState !== 'PLAYING' || isUnitComplete) return; 
+          if(!engineRef.current || isPaused || gameState !== 'PLAYING' || isUnitComplete) return; 
+          
+          const target = e.target as HTMLElement;
+          if (target.closest('[data-ui="true"]')) return;
+
           if (!isMobile) {
             engineRef.current.fire(); 
           }
@@ -289,7 +296,7 @@ function App() {
       window.addEventListener('resize', handleResize);
       window.addEventListener('mousemove', handleMove);
       window.addEventListener('touchmove', handleMove, {passive: false});
-      window.addEventListener('touchstart', handleTouchStart);
+      window.addEventListener('touchstart', handleTouchStart, {passive: true});
       window.addEventListener('touchend', handleTouchEnd);
       window.addEventListener('mousedown', handleInput);
       window.addEventListener('keydown', handleKey);
@@ -376,7 +383,7 @@ const equipSkin = (id: string) => {
 
       {gameState === 'PLAYING' && (
         <div className="absolute inset-0 pointer-events-none p-3 md:p-6 flex flex-col justify-between">
-            <div className="flex justify-between items-start gap-2">
+            <div className="flex justify-between items-start gap-2" data-ui="true">
                 <div className="bg-slate-900/80 backdrop-blur-md rounded-xl md:rounded-2xl p-2 md:p-4 border border-slate-700 shadow-2xl min-w-[100px] md:min-w-[140px]">
                     <div className="text-amber-400 font-black text-lg md:text-2xl flex items-center gap-1 md:gap-2">
                       <GoldCoin size={18} /> {displayScore.toLocaleString()}
@@ -405,17 +412,18 @@ const equipSkin = (id: string) => {
                 </div>
             </div>
 
-            <div className="flex justify-between items-end w-full pb-4 md:pb-0">
-                <div className="flex flex-col gap-4 md:gap-6 pointer-events-auto">
+            <div className="flex justify-between items-end w-full pb-8 md:pb-0">
+                <div className="flex flex-col gap-4 md:gap-6 pointer-events-auto" data-ui="true">
                     <AbilityButton icon="💣" count={stats.bombs} color="red" onClick={() => engineRef.current?.useBomb()} label="פצצה" shortcut="A" />
                     <AbilityButton icon="🛡️" count={stats.shields} color="blue" onClick={() => engineRef.current?.useShield()} label="מגן" shortcut="S" />
                     <AbilityButton icon="⏳" count={stats.potions} color="purple" onClick={() => engineRef.current?.usePotion()} label="זמן" shortcut="D" />
                 </div>
                 
-                <div className="flex flex-col gap-4 items-center pointer-events-auto">
+                <div className="flex flex-col gap-4 items-center pointer-events-auto" data-ui="true">
                     {isMobile && (
                       <button 
-                        onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); engineRef.current?.fire(); }}
+                        onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); isInputOnUI.current = true; engineRef.current?.fire(); }}
+                        onPointerUp={(e) => { isInputOnUI.current = false; }}
                         className="w-16 h-16 bg-red-600/30 rounded-full border-4 border-white/30 flex items-center justify-center text-3xl shadow-2xl active:scale-90 active:bg-red-600/50 backdrop-blur-sm"
                       >
                         🔥
@@ -441,34 +449,34 @@ const equipSkin = (id: string) => {
 
             {isUnitComplete && transitionStats && (
                 <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-xl pointer-events-auto flex flex-col items-center justify-center z-[150] p-6 animate-fade-in">
-                    <div className="bg-slate-900/50 border-2 border-amber-500/30 p-8 md:p-12 rounded-[2rem] shadow-[0_0_50px_rgba(245,158,11,0.2)] text-center max-w-lg w-full">
-                        <h2 className="text-4xl md:text-6xl font-aramaic text-amber-500 mb-2">סיום יחידה!</h2>
-                        <p className="text-slate-400 text-lg md:text-2xl mb-8 font-bold">ניצחת את הבוס של {currentSugia?.title || `יחידה ${transitionStats.level}`}</p>
+                    <div className="bg-slate-900/50 border-2 border-amber-500/30 p-6 md:p-12 rounded-[2rem] shadow-[0_0_50px_rgba(245,158,11,0.2)] text-center max-w-lg w-full">
+                        <h2 className="text-3xl md:text-6xl font-aramaic text-amber-500 mb-2">סיום יחידה!</h2>
+                        <p className="text-slate-400 text-sm md:text-2xl mb-6 md:mb-8 font-bold">ניצחת את הבוס של {currentSugia?.title || `יחידה ${transitionStats.level}`}</p>
                         
-                        <div className="grid grid-cols-2 gap-4 mb-8">
-                            <div className="bg-slate-800/50 p-4 rounded-2xl border border-slate-700">
-                                <div className="text-slate-500 text-xs font-bold uppercase mb-1">ניקוד מצטבר</div>
-                                <div className="text-2xl font-black text-amber-400">{transitionStats.score.toLocaleString()}</div>
+                        <div className="grid grid-cols-2 gap-3 mb-6 md:mb-8">
+                            <div className="bg-slate-800/50 p-3 md:p-4 rounded-2xl border border-slate-700">
+                                <div className="text-slate-500 text-[10px] md:text-xs font-bold uppercase mb-1">ניקוד מצטבר</div>
+                                <div className="text-lg md:text-2xl font-black text-amber-400">{transitionStats.score.toLocaleString()}</div>
                             </div>
-                            <div className="bg-slate-800/50 p-4 rounded-2xl border border-slate-700">
-                                <div className="text-slate-500 text-xs font-bold uppercase mb-1">רצף (Combo)</div>
-                                <div className="text-2xl font-black text-blue-400">{transitionStats.combo}</div>
+                            <div className="bg-slate-800/50 p-3 md:p-4 rounded-2xl border border-slate-700">
+                                <div className="text-slate-500 text-[10px] md:text-xs font-bold uppercase mb-1">רצף (Combo)</div>
+                                <div className="text-lg md:text-2xl font-black text-blue-400">{transitionStats.combo}</div>
                             </div>
                         </div>
 
-                        <div className="mb-10 text-right bg-black/30 p-6 rounded-3xl border border-amber-500/10 shadow-inner">
-                            <div className="text-amber-500 font-black text-xs md:text-sm mb-3 uppercase tracking-[0.2em] border-b border-amber-500/20 pb-2">לקראת היחידה הבאה:</div>
+                        <div className="mb-8 text-right bg-black/30 p-4 md:p-6 rounded-3xl border border-amber-500/10 shadow-inner">
+                            <div className="text-amber-500 font-black text-[10px] md:text-sm mb-2 uppercase tracking-[0.2em] border-b border-amber-500/20 pb-2">לקראת היחידה הבאה:</div>
                             {nextSugia ? (
-                              <div className="flex flex-col gap-2">
-                                <div className="text-2xl md:text-3xl font-aramaic font-black text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]">
+                              <div className="flex flex-col gap-1">
+                                <div className="text-xl md:text-3xl font-aramaic font-black text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]">
                                   עלית רמה! <span className="text-amber-400">{nextSugia.title}</span>
                                 </div>
-                                <div className="text-lg md:text-xl text-slate-300 font-medium italic leading-relaxed">
+                                <div className="text-sm md:text-xl text-slate-300 font-medium italic leading-relaxed line-clamp-2 md:line-clamp-none">
                                   {nextSugia.description}
                                 </div>
                               </div>
                             ) : (
-                              <div className="text-2xl font-aramaic font-black text-amber-400 text-center">
+                              <div className="text-xl font-aramaic font-black text-amber-400 text-center">
                                 כל הכבוד! סיימת את כל הסוגיות במסכת!
                               </div>
                             )}
@@ -476,7 +484,7 @@ const equipSkin = (id: string) => {
 
                         <button 
                             onClick={proceedToNextSugia} 
-                            className="w-full bg-gradient-to-r from-amber-600 to-yellow-500 p-5 rounded-2xl text-2xl font-black shadow-xl hover:scale-105 active:scale-95 transition-all border-b-4 border-amber-900 text-slate-950"
+                            className="w-full bg-gradient-to-r from-amber-600 to-yellow-500 p-4 md:p-5 rounded-2xl text-xl md:text-2xl font-black shadow-xl hover:scale-105 active:scale-95 transition-all border-b-4 border-amber-900 text-slate-950"
                         >
                             עבור לסוגיא הבאה
                         </button>
@@ -496,17 +504,17 @@ const equipSkin = (id: string) => {
       {gameState === 'MENU' && (
           <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=2000')] bg-cover bg-center flex items-center justify-center">
               <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-md"></div>
-              <div className="relative z-10 flex flex-col items-center p-4 md:p-8 w-full max-w-xl text-center overflow-y-auto max-h-full">
-                  <h1 className="font-aramaic text-6xl md:text-9xl bg-gradient-to-b from-amber-200 via-yellow-400 to-amber-700 bg-clip-text text-transparent drop-shadow-[0_10px_10px_rgba(0,0,0,0.5)] mb-2 md:mb-4 animate-bounce-slow">
+              <div className="relative z-10 flex flex-col items-center p-4 md:p-8 w-full max-w-xl text-center overflow-y-auto max-h-full scrollbar-hide">
+                  <h1 className="font-aramaic text-5xl md:text-9xl bg-gradient-to-b from-amber-200 via-yellow-400 to-amber-700 bg-clip-text text-transparent drop-shadow-[0_10px_10px_rgba(0,0,0,0.5)] mb-1 md:mb-4 animate-bounce-slow">
                       רמי וקטיל
                   </h1>
-                  <p className="text-slate-300 mb-6 md:mb-8 text-lg md:text-2xl font-light tracking-widest border-b border-amber-500/30 pb-2">אלוף הארמית - גרסת הקרב</p>
+                  <p className="text-slate-300 mb-4 md:mb-8 text-sm md:text-2xl font-light tracking-widest border-b border-amber-500/30 pb-2 uppercase">אלוף הארמית - גרסת הקרב</p>
                   
                   <div className="flex flex-col gap-4 md:gap-6 w-full px-2 md:px-4">
                       <div className="grid grid-cols-2 gap-2 md:gap-4">
                         <div className="flex flex-col gap-1 text-right">
                           <label className="text-slate-500 text-[10px] md:text-xs font-bold mr-2">רמת קושי</label>
-                          <select className="bg-slate-900 border border-slate-700 p-2 md:p-3 rounded-xl text-sm md:text-lg text-white outline-none"
+                          <select className="bg-slate-900 border border-slate-700 p-2 md:p-3 rounded-xl text-xs md:text-lg text-white outline-none"
                             value={config.difficulty} onChange={e => { setConfig({...config, difficulty: e.target.value as any}); Sound.play('ui_click'); }}>
                               <option value="easy">🌟 קל</option>
                               <option value="medium">🔥🔥 בינוני</option>
@@ -515,7 +523,7 @@ const equipSkin = (id: string) => {
                         </div>
                         <div className="flex flex-col gap-1 text-right">
                           <label className="text-slate-500 text-[10px] md:text-xs font-bold mr-2">קטגוריית מילים</label>
-                          <select className="bg-slate-900 border border-slate-700 p-2 md:p-3 rounded-xl text-sm md:text-lg text-white outline-none"
+                          <select className="bg-slate-900 border border-slate-700 p-2 md:p-3 rounded-xl text-xs md:text-lg text-white outline-none"
                             value={config.category} onChange={e => { setConfig({...config, category: e.target.value as any}); Sound.play('ui_click'); }}>
                               <option value="common">📖 מילים נפוצות</option>
                               <option value="berachot">🍷 מסכת ברכות</option>
@@ -524,13 +532,13 @@ const equipSkin = (id: string) => {
                         </div>
                       </div>
 
-                      <button onClick={() => navigateTo('MAP')} className="group relative bg-gradient-to-r from-amber-700 to-amber-500 p-4 md:p-6 rounded-2xl text-2xl md:text-4xl font-black shadow-[0_0_30px_rgba(251,191,36,0.4)] hover:scale-105 transition-all border-b-4 border-amber-900 active:translate-y-1 active:border-b-0 overflow-hidden">
+                      <button onClick={() => navigateTo('MAP')} className="group relative bg-gradient-to-r from-amber-700 to-amber-500 p-4 md:p-6 rounded-2xl text-xl md:text-4xl font-black shadow-[0_0_30px_rgba(251,191,36,0.4)] hover:scale-105 transition-all border-b-4 border-amber-900 active:translate-y-1 active:border-b-0 overflow-hidden">
                           נתיב הסוגיות
                       </button>
                       <div className="grid grid-cols-3 gap-2 md:gap-4">
-                          <button onClick={() => navigateTo('SHOP')} className="bg-slate-800/80 p-3 md:p-5 rounded-xl border border-slate-700 text-sm md:text-xl font-bold transition-all shadow-lg">🛒 חנות</button>
-                          <button onClick={() => { fetchLeaderboard(); navigateTo('LEADERBOARD'); }} className="bg-amber-800/80 p-3 md:p-5 rounded-xl border border-amber-700 text-sm md:text-xl font-bold transition-all shadow-lg">🏆 אלופים</button>
-                          <button onClick={() => navigateTo('ACHIEVEMENTS')} className="bg-purple-800/80 p-3 md:p-5 rounded-xl border border-purple-700 text-sm md:text-xl font-bold transition-all shadow-lg">📜 הישגים</button>
+                          <button onClick={() => navigateTo('SHOP')} className="bg-slate-800/80 p-2 md:p-5 rounded-xl border border-slate-700 text-xs md:text-xl font-bold transition-all shadow-lg">🛒 חנות</button>
+                          <button onClick={() => { fetchLeaderboard(); navigateTo('LEADERBOARD'); }} className="bg-amber-800/80 p-2 md:p-5 rounded-xl border border-amber-700 text-xs md:text-xl font-bold transition-all shadow-lg">🏆 אלופים</button>
+                          <button onClick={() => navigateTo('ACHIEVEMENTS')} className="bg-purple-800/80 p-2 md:p-5 rounded-xl border border-purple-700 text-xs md:text-xl font-bold transition-all shadow-lg">📜 הישגים</button>
                       </div>
                       
                       <div className="hidden md:block">
@@ -546,14 +554,14 @@ const equipSkin = (id: string) => {
               <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/parchment.png')]"></div>
               <div className="absolute inset-0 border-[10px] md:border-[30px] border-amber-900/10 pointer-events-none"></div>
 
-              <div className="relative z-10 p-4 md:p-8 flex justify-between items-center bg-amber-900/10 border-b-4 border-amber-900/30 backdrop-blur-sm">
-                <button onClick={handleReturnToMenu} className="bg-amber-800 text-white px-4 py-2 md:px-8 md:py-3 rounded-xl font-bold text-sm md:text-lg shadow-lg">חזור</button>
-                <h2 className="text-3xl md:text-6xl font-aramaic text-amber-900 font-black tracking-tighter">דף הסוגיות</h2>
-                <div className="bg-white/60 px-3 py-1 md:px-6 md:py-2 rounded-full border-2 border-amber-900/30 font-black text-amber-900 text-xs md:text-base">רמה: {maxLevelReached}</div>
+              <div className="relative z-10 p-3 md:p-8 flex justify-between items-center bg-amber-900/10 border-b-4 border-amber-900/30 backdrop-blur-sm">
+                <button onClick={handleReturnToMenu} className="bg-amber-800 text-white px-4 py-2 md:px-8 md:py-3 rounded-xl font-bold text-xs md:text-lg shadow-lg">חזור</button>
+                <h2 className="text-2xl md:text-6xl font-aramaic text-amber-900 font-black tracking-tighter">דף הסוגיות</h2>
+                <div className="bg-white/60 px-3 py-1 md:px-6 md:py-2 rounded-full border-2 border-amber-900/30 font-black text-amber-900 text-[10px] md:text-base">רמה: {maxLevelReached}</div>
               </div>
               
-              <div className="flex-1 relative flex items-center justify-start p-6 md:p-12 overflow-x-auto scrollbar-hide">
-                  <div className="flex gap-10 md:gap-20 px-10 md:px-24 relative min-w-max">
+              <div className="flex-1 relative flex items-center justify-start p-4 md:p-12 overflow-x-auto overflow-y-hidden scrollbar-hide">
+                  <div className="flex gap-8 md:gap-20 px-8 md:px-24 relative min-w-max pb-8">
                       {SUGIOT.map((sugia, idx) => {
                           const isUnlocked = maxLevelReached >= sugia.requiredLevel;
                           const isSelected = selectedSugia?.id === sugia.id;
@@ -562,17 +570,17 @@ const equipSkin = (id: string) => {
                           return (
                               <div key={sugia.id} className="relative group flex flex-col items-center">
                                   {idx < SUGIOT.length - 1 && (
-                                    <div className={`absolute top-16 md:top-24 left-[7rem] md:left-[10rem] w-12 md:w-20 h-1 ${maxLevelReached >= SUGIOT[idx+1].requiredLevel ? 'bg-amber-600' : 'bg-amber-900/10'}`}></div>
+                                    <div className={`absolute top-12 md:top-24 left-[5rem] md:left-[10rem] w-8 md:w-20 h-1 ${maxLevelReached >= SUGIOT[idx+1].requiredLevel ? 'bg-amber-600' : 'bg-amber-900/10'}`}></div>
                                   )}
 
                                   <div onClick={() => { if(isUnlocked) { Sound.play('ui_click'); setSelectedSugia(sugia); } }}
-                                      className={`w-24 h-32 md:w-36 md:h-48 rounded-lg border-2 flex flex-col items-center justify-center text-2xl md:text-4xl font-aramaic transition-all cursor-pointer relative shadow-2xl
+                                      className={`w-20 h-24 md:w-36 md:h-48 rounded-lg border-2 flex flex-col items-center justify-center text-xl md:text-4xl font-aramaic transition-all cursor-pointer relative shadow-2xl
                                           ${isUnlocked ? (isSelected ? 'border-amber-600 bg-amber-50 scale-110 -translate-y-2 md:-translate-y-4 ring-4 ring-amber-400/20' : 'border-amber-900/30 bg-white hover:border-amber-700') : 'border-slate-300 bg-slate-100 grayscale opacity-40 cursor-not-allowed'}`}>
                                       <div className="text-amber-900/30 absolute top-1 right-1 text-[8px] md:text-[10px] font-bold">סוגיא {idx+1}</div>
                                       <div className="text-amber-900 font-black mb-1 md:mb-2">{isUnlocked ? String.fromCharCode(0x5D0 + (idx % 22)) : '🔒'}</div>
                                       <div className="text-amber-800/50 text-[8px] md:text-[10px] font-bold">{dafLabel}</div>
                                   </div>
-                                  <div className={`mt-3 md:mt-6 font-black text-xs md:text-base text-center leading-tight max-w-[100px] md:max-w-[140px] ${isUnlocked ? 'text-amber-950' : 'text-slate-400'}`}>{sugia.title}</div>
+                                  <div className={`mt-2 md:mt-6 font-black text-[10px] md:text-base text-center leading-tight max-w-[80px] md:max-w-[140px] ${isUnlocked ? 'text-amber-950' : 'text-slate-400'}`}>{sugia.title}</div>
                               </div>
                           );
                       })}
@@ -580,27 +588,27 @@ const equipSkin = (id: string) => {
               </div>
 
               {selectedSugia && (
-                  <div className="bg-white/95 backdrop-blur-lg p-4 md:p-10 border-t-4 md:border-t-8 border-amber-900/40 flex flex-col md:flex-row items-center justify-between z-20 shadow-[0_-10px_30px_rgba(0,0,0,0.15)] animate-slide-up gap-4">
+                  <div className="bg-white/95 backdrop-blur-lg p-3 md:p-10 border-t-4 md:border-t-8 border-amber-900/40 flex flex-col md:flex-row items-center justify-between z-20 shadow-[0_-10px_30px_rgba(0,0,0,0.15)] animate-slide-up gap-2 md:gap-4 pb-6 md:pb-10">
                       <div className="text-right w-full md:w-auto">
-                          <h3 className="text-2xl md:text-4xl font-black text-amber-900 mb-1 font-aramaic">{selectedSugia.title}</h3>
-                          <p className="text-sm md:text-xl text-amber-800/70 italic max-w-2xl">{selectedSugia.description}</p>
+                          <h3 className="text-lg md:text-4xl font-black text-amber-900 mb-0 font-aramaic">{selectedSugia.title}</h3>
+                          <p className="text-xs md:text-xl text-amber-800/70 italic max-w-2xl line-clamp-1 md:line-clamp-none">{selectedSugia.description}</p>
                       </div>
-                      <button onClick={() => startGame(selectedSugia)} className="w-full md:w-auto bg-gradient-to-r from-blue-700 to-blue-500 text-white px-10 md:px-20 py-4 md:py-6 rounded-2xl text-2xl md:text-4xl font-black shadow-2xl active:scale-95 border-b-4 md:border-b-8 border-blue-900">התחל בסוגיא</button>
+                      <button onClick={() => startGame(selectedSugia)} className="w-full md:w-auto bg-gradient-to-r from-blue-700 to-blue-500 text-white px-6 md:px-20 py-3 md:py-6 rounded-xl md:rounded-2xl text-lg md:text-4xl font-black shadow-2xl active:scale-95 border-b-4 md:border-b-8 border-blue-900">התחל בסוגיא</button>
                   </div>
               )}
           </div>
       )}
 
       {gameState === 'SHOP' && (
-          <div className="absolute inset-0 bg-slate-950/95 flex flex-col items-center p-4 md:p-8 z-20 overflow-y-auto">
+          <div className="absolute inset-0 bg-slate-950/95 flex flex-col items-center p-4 md:p-8 z-20 overflow-y-auto scrollbar-hide">
               <div className="w-full max-w-5xl">
                 <div className="flex flex-col md:flex-row justify-between items-center mb-6 md:mb-12 border-b border-slate-800 pb-4 md:pb-6 gap-4">
-                  <h2 className="text-4xl md:text-6xl font-aramaic text-amber-500 drop-shadow-lg">חנות הציוד</h2>
-                  <div className="text-2xl md:text-4xl font-black text-white bg-slate-900 px-6 py-2 md:px-8 md:py-3 rounded-full border border-slate-700 shadow-inner flex items-center gap-3">
+                  <h2 className="text-3xl md:text-6xl font-aramaic text-amber-500 drop-shadow-lg">חנות הציוד</h2>
+                  <div className="text-xl md:text-4xl font-black text-white bg-slate-900 px-6 py-2 md:px-8 md:py-3 rounded-full border border-slate-700 shadow-inner flex items-center gap-3">
                     {coins.toLocaleString()} <GoldCoin size={24} />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-8 mb-8 md:mb-12">
+                <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-8 mb-8 md:mb-12">
                     {SHOP_ITEMS.map(item => {
                         const owned = item.type === 'skin' ? inventory.skins.includes(item.id) : false;
                         const equipped = inventory.currentSkin === item.id;
@@ -608,33 +616,33 @@ const equipSkin = (id: string) => {
                         
                         return (
                             <div key={item.id} onClick={() => owned && item.type === 'skin' ? equipSkin(item.id) : buyItem(item)}
-                              className={`relative p-3 md:p-6 rounded-2xl md:rounded-3xl border-2 flex flex-col items-center text-center cursor-pointer transition-all duration-300 group
+                              className={`relative p-3 md:p-6 rounded-xl md:rounded-3xl border-2 flex flex-col items-center text-center cursor-pointer transition-all duration-300 group
                                   ${equipped ? 'border-amber-400 bg-amber-900/20 shadow-lg' : 'border-slate-800 bg-slate-900/50'}
                                   ${locked ? 'opacity-60 grayscale cursor-not-allowed' : ''}
                               `}>
-                                <div className="text-4xl md:text-7xl mb-3 md:mb-6 transform group-hover:scale-110 transition-transform">{item.icon}</div>
-                                <h3 className="font-black text-white text-sm md:text-2xl mb-1 md:mb-2">{item.name}</h3>
-                                <p className="text-[10px] md:text-sm text-slate-400 mb-3 md:mb-6 flex-1 line-clamp-2">{item.desc}</p>
-                                <div className={`w-full py-2 md:py-3 rounded-xl font-black text-xs md:text-base flex items-center justify-center gap-1 md:gap-2 ${owned && item.type === 'skin' ? (equipped ? 'bg-green-600' : 'bg-slate-700') : 'bg-amber-600'}`}>
+                                <div className="text-3xl md:text-7xl mb-2 md:mb-6 transform group-hover:scale-110 transition-transform">{item.icon}</div>
+                                <h3 className="font-black text-white text-[11px] md:text-2xl mb-1 md:mb-2">{item.name}</h3>
+                                <p className="text-[8px] md:text-sm text-slate-400 mb-2 md:mb-6 flex-1 line-clamp-2">{item.desc}</p>
+                                <div className={`w-full py-1.5 md:py-3 rounded-lg md:rounded-xl font-black text-[10px] md:text-base flex items-center justify-center gap-1 md:gap-2 ${owned && item.type === 'skin' ? (equipped ? 'bg-green-600' : 'bg-slate-700') : 'bg-amber-600'}`}>
                                   {locked ? '🔒 נעול' : (owned && item.type === 'skin' ? (equipped ? 'בשימוש' : 'בחר') : <>{item.price} <GoldCoin size={14} /></>)}
                                 </div>
                             </div>
                         );
                     })}
                 </div>
-                <button onClick={handleReturnToMenu} className="bg-slate-700 px-10 md:px-16 py-3 md:py-4 rounded-2xl text-xl md:text-2xl font-black mx-auto block">חזור</button>
+                <button onClick={handleReturnToMenu} className="bg-slate-700 px-10 md:px-16 py-3 md:py-4 rounded-xl md:rounded-2xl text-lg md:text-2xl font-black mx-auto block mb-8">חזור</button>
               </div>
           </div>
       )}
 
       {gameState === 'LEADERBOARD' && (
-          <div className="absolute inset-0 bg-slate-950/98 flex flex-col items-center p-4 md:p-8 z-20 overflow-y-auto">
+          <div className="absolute inset-0 bg-slate-950/98 flex flex-col items-center p-4 md:p-8 z-20 overflow-y-auto scrollbar-hide">
               <div className="w-full max-w-4xl">
-                  <h2 className="text-4xl md:text-7xl font-aramaic text-amber-500 text-center mb-6 md:mb-12">טבלת האלופים</h2>
+                  <h2 className="text-3xl md:text-7xl font-aramaic text-amber-500 text-center mb-6 md:mb-12">טבלת האלופים</h2>
                   {loading ? (
-                      <div className="text-xl md:text-3xl text-center text-slate-400 animate-pulse">טוען נתונים...</div>
+                      <div className="text-lg md:text-3xl text-center text-slate-400 animate-pulse">טוען נתונים...</div>
                   ) : (
-                      <div className="bg-slate-900/50 rounded-2xl md:rounded-3xl border border-slate-800 overflow-hidden mb-6 md:mb-12">
+                      <div className="bg-slate-900/50 rounded-xl md:rounded-3xl border border-slate-800 overflow-hidden mb-6 md:mb-12">
                           <table className="w-full text-right border-collapse text-xs md:text-base">
                               <thead className="bg-slate-800 text-slate-400 uppercase tracking-widest font-black">
                                   <tr>
@@ -647,10 +655,10 @@ const equipSkin = (id: string) => {
                               <tbody>
                                   {leaderboard.map((entry, idx) => (
                                       <tr key={idx} className={`border-b border-slate-800 ${idx === 0 ? 'bg-amber-900/10' : ''}`}>
-                                          <td className="p-3 md:p-6 text-lg md:text-2xl font-black text-slate-500">{idx + 1}</td>
-                                          <td className="p-3 md:p-6 text-sm md:text-xl font-bold text-white truncate max-w-[80px] md:max-w-none">{entry.name}</td>
-                                          <td className="p-3 md:p-6 text-xs md:text-lg text-slate-400 truncate max-w-[60px] md:max-w-none">{entry.class}</td>
-                                          <td className="p-3 md:p-6 text-sm md:text-2xl font-black text-amber-400 flex items-center gap-1">
+                                          <td className="p-3 md:p-6 text-sm md:text-2xl font-black text-slate-500">{idx + 1}</td>
+                                          <td className="p-3 md:p-6 text-xs md:text-xl font-bold text-white truncate max-w-[80px] md:max-w-none">{entry.name}</td>
+                                          <td className="p-3 md:p-6 text-[10px] md:text-lg text-slate-400 truncate max-w-[60px] md:max-w-none">{entry.class}</td>
+                                          <td className="p-3 md:p-6 text-xs md:text-2xl font-black text-amber-400 flex items-center gap-1">
                                             {entry.score.toLocaleString()} <GoldCoin size={14} />
                                           </td>
                                       </tr>
@@ -659,66 +667,66 @@ const equipSkin = (id: string) => {
                           </table>
                       </div>
                   )}
-                  <button onClick={handleReturnToMenu} className="bg-slate-700 px-10 md:px-16 py-3 md:py-4 rounded-2xl text-xl md:text-2xl font-black mx-auto block">חזור</button>
+                  <button onClick={handleReturnToMenu} className="bg-slate-700 px-10 md:px-16 py-3 md:py-4 rounded-xl md:rounded-2xl text-lg md:text-2xl font-black mx-auto block mb-8">חזור</button>
               </div>
           </div>
       )}
 
       {gameState === 'ACHIEVEMENTS' && (
-          <div className="absolute inset-0 bg-slate-950/95 flex flex-col items-center p-4 md:p-8 z-20 overflow-y-auto">
+          <div className="absolute inset-0 bg-slate-950/95 flex flex-col items-center p-4 md:p-8 z-20 overflow-y-auto scrollbar-hide">
               <div className="w-full max-w-4xl">
-                  <h2 className="text-4xl md:text-7xl font-aramaic text-purple-400 text-center mb-6 md:mb-12">הישגים תורניים</h2>
-                  <div className="space-y-4 md:space-y-6 mb-8 md:mb-12">
+                  <h2 className="text-3xl md:text-7xl font-aramaic text-purple-400 text-center mb-6 md:mb-12">הישגים תורניים</h2>
+                  <div className="space-y-3 md:space-y-6 mb-8 md:mb-12">
                       {ACHIEVEMENTS.map(ach => {
                           const unlocked = unlockedAchievements.includes(ach.id);
                           return (
-                              <div key={ach.id} className={`flex items-center gap-4 md:gap-8 p-4 md:p-8 rounded-2xl md:rounded-3xl border-2 transition-all ${unlocked ? 'border-purple-500 bg-purple-900/20' : 'border-slate-800 bg-slate-900/30 grayscale opacity-40'}`}>
-                                  <div className="text-4xl md:text-8xl">{ach.icon}</div>
+                              <div key={ach.id} className={`flex items-center gap-3 md:gap-8 p-3 md:p-8 rounded-xl md:rounded-3xl border-2 transition-all ${unlocked ? 'border-purple-500 bg-purple-900/20' : 'border-slate-800 bg-slate-900/30 grayscale opacity-40'}`}>
+                                  <div className="text-3xl md:text-8xl">{ach.icon}</div>
                                   <div className="text-right flex-1">
-                                      <h3 className="text-xl md:text-4xl font-black text-white mb-1">{ach.title}</h3>
-                                      <p className="text-xs md:text-xl text-slate-400">{ach.desc}</p>
+                                      <h3 className="text-sm md:text-4xl font-black text-white mb-0.5 md:mb-1">{ach.title}</h3>
+                                      <p className="text-[10px] md:text-xl text-slate-400 line-clamp-2 md:line-clamp-none">{ach.desc}</p>
                                   </div>
-                                  {unlocked && <div className="text-green-400 font-black text-xs md:text-lg">הושלם!</div>}
+                                  {unlocked && <div className="text-green-400 font-black text-[10px] md:text-lg">הושלם!</div>}
                               </div>
                           );
                       })}
                   </div>
-                  <button onClick={handleReturnToMenu} className="bg-slate-700 px-10 md:px-16 py-3 md:py-4 rounded-2xl text-xl md:text-2xl font-black mx-auto block">חזור</button>
+                  <button onClick={handleReturnToMenu} className="bg-slate-700 px-10 md:px-16 py-3 md:py-4 rounded-xl md:rounded-2xl text-lg md:text-2xl font-black mx-auto block mb-8">חזור</button>
               </div>
           </div>
       )}
 
       {gameState === 'GAMEOVER' && (
-          <div className="absolute inset-0 bg-slate-950/98 flex flex-col items-center justify-center p-4 md:p-8 z-30 overflow-y-auto">
-              <h2 className="text-5xl md:text-8xl text-red-600 font-black mb-4 font-aramaic">המשחק נגמר</h2>
-              <div className="text-2xl md:text-4xl text-amber-500 font-black mb-8 md:mb-12 bg-slate-900 px-6 py-3 md:px-12 md:py-5 rounded-3xl border-2 border-amber-600/30 shadow-2xl flex items-center gap-2 md:gap-4">
+          <div className="absolute inset-0 bg-slate-950/98 flex flex-col items-center justify-start pt-10 md:justify-center p-4 md:p-8 z-30 overflow-y-auto scrollbar-hide">
+              <h2 className="text-4xl md:text-8xl text-red-600 font-black mb-3 md:mb-4 font-aramaic drop-shadow-[0_0_20px_rgba(220,38,38,0.3)]">המשחק נגמר</h2>
+              <div className="text-xl md:text-4xl text-amber-500 font-black mb-6 md:mb-12 bg-slate-900 px-6 py-2 md:px-12 md:py-5 rounded-2xl md:rounded-3xl border-2 border-amber-600/30 shadow-2xl flex items-center gap-2 md:gap-4">
                 ניקוד: {stats.score.toLocaleString()} <GoldCoin size={24} />
               </div>
-              <div className="bg-slate-900/80 p-6 md:p-8 rounded-3xl w-full max-w-md mb-8 md:mb-12 border border-slate-800">
-                  <h3 className="text-xl md:text-2xl text-white font-black mb-4 md:mb-6 text-center">שמור תוצאה</h3>
-                  <div className="space-y-3 md:space-y-4">
-                    <input type="text" placeholder="שם מלא" value={playerName} onChange={e => setPlayerName(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 md:p-4 text-center text-white text-lg md:text-xl font-bold outline-none" />
-                    <input type="text" placeholder="כיתה / קבוצה" value={playerClass} onChange={e => setPlayerClass(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 md:p-4 text-center text-white text-lg md:text-xl font-bold outline-none" />
+              <div className="bg-slate-900/80 p-5 md:p-8 rounded-2xl md:rounded-3xl w-full max-w-md mb-6 md:mb-12 border border-slate-800">
+                  <h3 className="text-lg md:text-2xl text-white font-black mb-3 md:mb-6 text-center">שמור תוצאה</h3>
+                  <div className="space-y-2 md:space-y-4">
+                    <input type="text" placeholder="שם מלא" value={playerName} onChange={e => setPlayerName(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-lg md:rounded-xl p-2.5 md:p-4 text-center text-white text-base md:text-xl font-bold outline-none" />
+                    <input type="text" placeholder="כיתה / קבוצה" value={playerClass} onChange={e => setPlayerClass(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-lg md:rounded-xl p-2.5 md:p-4 text-center text-white text-base md:text-xl font-bold outline-none" />
                     <button onClick={() => {
                         if(!playerName || !playerClass) return alert('נא למלא פרטים');
                         setLoading(true);
                         fetch(SCRIPT_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ name: playerName, class: playerClass, score: stats.score }) })
                           .then(() => { setLoading(false); alert('הציון נשמר!'); handleReturnToMenu(); })
                           .catch(() => { setLoading(false); alert('שגיאה בשמירה'); });
-                    }} disabled={loading} className="w-full bg-green-600 hover:bg-green-500 py-3 md:py-4 rounded-xl font-black text-white text-xl md:text-2xl shadow-xl transition-all disabled:opacity-50">
+                    }} disabled={loading} className="w-full bg-green-600 hover:bg-green-500 py-3 md:py-4 rounded-lg md:rounded-xl font-black text-white text-lg md:text-2xl shadow-xl transition-all disabled:opacity-50">
                         {loading ? 'שומר...' : 'שמור בטבלה'}
                     </button>
                   </div>
               </div>
-              <div className="flex gap-2 md:gap-4 w-full max-w-md">
-                  <button onClick={() => startGame(selectedSugia || undefined)} className="flex-1 bg-blue-600 px-4 py-3 md:px-8 md:py-5 rounded-2xl font-black text-sm md:text-xl transition-all">שוב</button>
+              <div className="flex gap-2 md:gap-4 w-full max-w-md pb-10 md:pb-0">
+                  <button onClick={() => startGame(selectedSugia || undefined)} className="flex-1 bg-blue-600 px-3 py-3 md:px-8 md:py-5 rounded-xl md:rounded-2xl font-black text-sm md:text-xl transition-all shadow-lg active:scale-95">שוב</button>
                   <button onClick={() => {
                       if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
                       engineRef.current = null;
                       Sound.play('ui_click');
                       setGameState('MAP');
-                  }} className="flex-1 bg-amber-700 px-4 py-3 md:px-8 md:py-5 rounded-2xl font-black text-sm md:text-xl transition-all">מפה</button>
-                  <button onClick={handleReturnToMenu} className="flex-1 bg-slate-800 px-4 py-3 md:px-8 md:py-5 rounded-2xl font-black text-sm md:text-xl transition-all">תפריט</button>
+                  }} className="flex-1 bg-amber-700 px-3 py-3 md:px-8 md:py-5 rounded-xl md:rounded-2xl font-black text-sm md:text-xl transition-all shadow-lg active:scale-95">מפה</button>
+                  <button onClick={handleReturnToMenu} className="flex-1 bg-slate-800 px-3 py-3 md:px-8 md:py-5 rounded-xl md:rounded-2xl font-black text-sm md:text-xl transition-all shadow-lg active:scale-95">תפריט</button>
               </div>
           </div>
       )}
@@ -730,7 +738,9 @@ const AbilityButton = ({icon, count, color, onClick, label, shortcut}: {icon:str
     const bg = color === 'red' ? 'bg-red-600 active:bg-red-700' : color === 'blue' ? 'bg-blue-600 active:bg-blue-700' : 'bg-purple-600 active:bg-purple-700';
     return (
         <div className="flex flex-col items-center gap-1 group pointer-events-auto">
-          <button onClick={(e) => { e.stopPropagation(); Sound.play('ui_click'); onClick(); }} disabled={count <= 0}
+          <button 
+              onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); Sound.play('ui_click'); if (count > 0) onClick(); }}
+              disabled={count <= 0}
               className={`w-12 h-12 md:w-20 md:h-20 rounded-2xl flex items-center justify-center text-xl md:text-4xl relative shadow-2xl border-b-4 active:border-b-0 active:translate-y-1 transition-all text-white
               ${count > 0 ? bg : 'bg-slate-800 grayscale opacity-40 cursor-not-allowed'}`}>
               {icon}
