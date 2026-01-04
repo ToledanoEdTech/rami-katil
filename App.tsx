@@ -50,6 +50,8 @@ function App() {
   const engineRef = useRef<GameEngine | null>(null);
   const animationFrameId = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
+  const lastTouchRef = useRef<{x: number, y: number} | null>(null);
+  const isInputOnUI = useRef(false);
   
   const [stats, setStats] = useState<GameStats>({
     score: 0, level: 1, lives: 3, combo: 0, coins: 0, bombs: 0, shields: 0, potions: 0,
@@ -209,19 +211,53 @@ function App() {
 
   useEffect(() => {
       const handleResize = () => { if(engineRef.current) engineRef.current.resize(window.innerWidth, window.innerHeight); };
+      
       const handleMove = (e: any) => {
-          if(!engineRef.current || gameState !== 'PLAYING') return;
-          const x = e.touches ? e.touches[0].clientX : e.clientX;
-          const y = e.touches ? e.touches[0].clientY : e.clientY;
-          engineRef.current.setPlayerPos(x, y);
-          if (e.touches) e.preventDefault();
+          if(!engineRef.current || gameState !== 'PLAYING' || isInputOnUI.current) return;
+          
+          if (e.touches) {
+              const touch = e.touches[0];
+              if (lastTouchRef.current) {
+                  // חישוב תזוזה יחסית - מונע קפיצות במובייל
+                  const dx = touch.clientX - lastTouchRef.current.x;
+                  const dy = touch.clientY - lastTouchRef.current.y;
+                  engineRef.current.movePlayer(dx, dy);
+              }
+              lastTouchRef.current = { x: touch.clientX, y: touch.clientY };
+              e.preventDefault();
+          } else {
+              // במחשב התנועה נשארת ישירה (עוקבת אחרי הסמן)
+              engineRef.current.setPlayerPos(e.clientX, e.clientY);
+          }
       };
+
+      const handleTouchStart = (e: TouchEvent) => {
+          if(!engineRef.current || gameState !== 'PLAYING') return;
+          
+          // בדיקה האם המגע התחיל על כפתור - אם כן, נתעלם ממנו לצורכי תנועה
+          const target = e.target as HTMLElement;
+          if (target.closest('button')) {
+            isInputOnUI.current = true;
+            lastTouchRef.current = null;
+            return;
+          }
+          
+          isInputOnUI.current = false;
+          lastTouchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      };
+
+      const handleTouchEnd = () => {
+          lastTouchRef.current = null;
+          isInputOnUI.current = false;
+      };
+
       const handleInput = (e: any) => { 
           if(!engineRef.current || e.target.closest('button') || isPaused || gameState !== 'PLAYING') return; 
           if (!isMobile) {
             engineRef.current.fire(); 
           }
       };
+      
       const handleKey = (e: KeyboardEvent) => {
           if (e.target instanceof HTMLInputElement) return;
           if (e.code === 'Escape' && gameState === 'PLAYING') {
@@ -235,15 +271,21 @@ function App() {
           if(e.code === 'KeyD') engineRef.current.usePotion();
           if(e.code === 'Space') engineRef.current.fire();
       };
+
       window.addEventListener('resize', handleResize);
       window.addEventListener('mousemove', handleMove);
       window.addEventListener('touchmove', handleMove, {passive: false});
+      window.addEventListener('touchstart', handleTouchStart);
+      window.addEventListener('touchend', handleTouchEnd);
       window.addEventListener('mousedown', handleInput);
       window.addEventListener('keydown', handleKey);
+      
       return () => {
           window.removeEventListener('resize', handleResize);
           window.removeEventListener('mousemove', handleMove);
           window.removeEventListener('touchmove', handleMove);
+          window.removeEventListener('touchstart', handleTouchStart);
+          window.removeEventListener('touchend', handleTouchEnd);
           window.removeEventListener('mousedown', handleInput);
           window.removeEventListener('keydown', handleKey);
       };
@@ -357,7 +399,8 @@ const equipSkin = (id: string) => {
                     {isMobile && (
                       <button 
                         onPointerDown={(e) => { e.preventDefault(); engineRef.current?.fire(); }}
-                        className="w-20 h-20 bg-red-600/30 rounded-full border-4 border-white/30 flex items-center justify-center text-4xl shadow-2xl active:scale-90 active:bg-red-600/50 backdrop-blur-sm"
+                        // הקטנת כפתור הירי במובייל מ-20 ל-16
+                        className="w-16 h-16 bg-red-600/30 rounded-full border-4 border-white/30 flex items-center justify-center text-3xl shadow-2xl active:scale-90 active:bg-red-600/50 backdrop-blur-sm"
                       >
                         🔥
                       </button>
@@ -436,6 +479,9 @@ const equipSkin = (id: string) => {
               </div>
           </div>
       )}
+
+      {/* Map, Shop, Leaderboard, Achievements screens... */}
+      {/* ... keeping other screens logic same but updating button sizes where applicable ... */}
 
       {gameState === 'MAP' && (
           <div className="absolute inset-0 bg-[#fbf3db] flex flex-col z-[50] overflow-hidden">
@@ -523,6 +569,7 @@ const equipSkin = (id: string) => {
           </div>
       )}
 
+      {/* Same for Leaderboard and Achievements... */}
       {gameState === 'LEADERBOARD' && (
           <div className="absolute inset-0 bg-slate-950/98 flex flex-col items-center p-4 md:p-8 z-20 overflow-y-auto">
               <div className="w-full max-w-4xl">
@@ -627,10 +674,11 @@ const AbilityButton = ({icon, count, color, onClick, label, shortcut}: {icon:str
     return (
         <div className="flex flex-col items-center gap-1 group pointer-events-auto">
           <button onClick={(e) => { e.stopPropagation(); Sound.play('ui_click'); onClick(); }} disabled={count <= 0}
-              className={`w-14 h-14 md:w-20 md:h-20 rounded-2xl flex items-center justify-center text-2xl md:text-4xl relative shadow-2xl border-b-4 active:border-b-0 active:translate-y-1 transition-all text-white
+              // הקטנת כפתורי היכולות במובייל מ-14 ל-12
+              className={`w-12 h-12 md:w-20 md:h-20 rounded-2xl flex items-center justify-center text-xl md:text-4xl relative shadow-2xl border-b-4 active:border-b-0 active:translate-y-1 transition-all text-white
               ${count > 0 ? bg : 'bg-slate-800 grayscale opacity-40 cursor-not-allowed'}`}>
               {icon}
-              <span className="absolute -top-1 -right-1 md:-top-2 md:-right-2 bg-white text-slate-950 font-black text-[10px] md:text-sm px-1.5 md:px-2 py-0.5 rounded-full shadow-lg border border-slate-950">{count}</span>
+              <span className="absolute -top-1 -right-1 md:-top-2 md:-right-2 bg-white text-slate-950 font-black text-[8px] md:text-sm px-1 md:px-2 py-0.5 rounded-full shadow-lg border border-slate-950">{count}</span>
           </button>
           <div className="hidden md:flex flex-col items-center opacity-0 group-hover:opacity-100 transition-opacity">
             <span className="text-white text-[10px] font-black tracking-widest uppercase">{label} ({shortcut})</span>

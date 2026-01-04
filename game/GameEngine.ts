@@ -108,7 +108,10 @@ export class GameEngine {
     this.applySkinWeapon();
 
     const isMobile = this.width < 600;
-    this.player = { x: this.width / 2, y: this.height - (isMobile ? 180 : 150), width: 24, height: 24, isHit: false };
+    // הקטנת מידות השחקן במובייל לצורך התנגשויות מדויקות יותר
+    const pW = isMobile ? 18 : 24;
+    const pH = isMobile ? 18 : 24;
+    this.player = { x: this.width / 2, y: this.height - (isMobile ? 180 : 150), width: pW, height: pH, isHit: false };
     
     this.activeDictionary = DICTIONARY.filter(w => w.cat === config.category);
     if (this.activeDictionary.length === 0) this.activeDictionary = [...DICTIONARY];
@@ -280,7 +283,9 @@ export class GameEngine {
           else { p.x += p.vx * dt; p.y += p.vy * dt; }
           if (p.type === 'missile') this.applyHoming(p, dt);
           if (this.boss && p.active) {
-              let isHit = p.type === 'beam' ? (Math.abs(p.x - this.boss.x) < 140 && this.boss.y < p.y) : (Math.hypot(p.x - this.boss.x, p.y - this.boss.y) < (p.type === 'fire' ? 170 : 140));
+              const isMobile = this.width < 600;
+              const hitRadius = isMobile ? 100 : 140;
+              let isHit = p.type === 'beam' ? (Math.abs(p.x - this.boss.x) < hitRadius && this.boss.y < p.y) : (Math.hypot(p.x - this.boss.x, p.y - this.boss.y) < (p.type === 'fire' ? hitRadius * 1.2 : hitRadius));
               if (isHit) { this.damageBoss(p); if (p.type !== 'beam') p.active = false; }
           }
           if (p.y < -400 || p.y > this.height + 400) p.active = false;
@@ -515,7 +520,9 @@ export class GameEngine {
 
   renderShip() {
       const skin = this.config.skin;
-      const scale = 0.75; 
+      const isMobile = this.width < 600;
+      // הקטנת המטוס במובייל מ-0.75 ל-0.55
+      const scale = isMobile ? 0.55 : 0.75; 
       if (skin === 'skin_choshen') {
           this.ctx.save(); this.ctx.scale(scale, scale);
           const w = 55, h = 70;
@@ -583,17 +590,20 @@ export class GameEngine {
 
   drawProjectile(p: PoolableProjectile) {
       if (!p.active) return;
+      const isMobile = this.width < 600;
       this.ctx.save();
       if(p.type === 'beam') {
-          this.ctx.shadowBlur = 80; this.ctx.shadowColor = '#fbbf24';
-          this.ctx.strokeStyle = 'rgba(251, 191, 36, 0.4)'; this.ctx.lineWidth = 70;
+          // הקטנת עובי הקרן במובייל ב-50%
+          const scale = isMobile ? 0.5 : 1.0;
+          this.ctx.shadowBlur = 80 * scale; this.ctx.shadowColor = '#fbbf24';
+          this.ctx.strokeStyle = 'rgba(251, 191, 36, 0.4)'; this.ctx.lineWidth = 70 * scale;
           this.ctx.beginPath(); this.ctx.moveTo(p.x, p.y); this.ctx.lineTo(p.x, -100); this.ctx.stroke();
-          this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)'; this.ctx.lineWidth = 35;
+          this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)'; this.ctx.lineWidth = 35 * scale;
           this.ctx.beginPath(); this.ctx.moveTo(p.x, p.y); this.ctx.lineTo(p.x, -100); this.ctx.stroke();
-          this.ctx.shadowBlur = 40; this.ctx.shadowColor = '#fff';
-          this.ctx.strokeStyle = '#fff'; this.ctx.lineWidth = 14;
+          this.ctx.shadowBlur = 40 * scale; this.ctx.shadowColor = '#fff';
+          this.ctx.strokeStyle = '#fff'; this.ctx.lineWidth = 14 * scale;
           this.ctx.beginPath(); this.ctx.moveTo(p.x, p.y); this.ctx.lineTo(p.x, -100); this.ctx.stroke();
-          this.ctx.fillStyle = '#fff'; this.ctx.beginPath(); this.ctx.arc(p.x, 100, 45, 0, Math.PI*2); this.ctx.fill();
+          this.ctx.fillStyle = '#fff'; this.ctx.beginPath(); this.ctx.arc(p.x, 100, 45 * scale, 0, Math.PI*2); this.ctx.fill();
       } else if (p.type === 'fire') {
           this.ctx.translate(p.x, p.y); const rPulse = 35 + Math.sin(this.gameFrame * 0.4) * 12;
           const fG = this.ctx.createRadialGradient(0,0,5,0,0,rPulse); fG.addColorStop(0, '#fff'); fG.addColorStop(0.3, '#fde68a'); fG.addColorStop(0.6, '#f97316'); fG.addColorStop(1, 'transparent');
@@ -649,7 +659,11 @@ export class GameEngine {
 
   drawBoss() { 
       const b = this.boss; if (!b) return;
+      const isMobile = this.width < 600;
       this.ctx.save(); this.ctx.translate(b.x, b.y);
+      // הקטנת הבוסים במובייל ב-25%
+      if (isMobile) this.ctx.scale(0.75, 0.75);
+      
       const typeIdx = ((Math.floor(this.level / 10) - 1) % 6) + 1;
       if (typeIdx === 1) this.drawTannina(); 
       else if (typeIdx === 2) this.drawKoy(); 
@@ -707,6 +721,11 @@ export class GameEngine {
 
   drawBonus(b: any) { 
       this.ctx.save(); this.ctx.translate(b.x, b.y); const rot = this.gameFrame * 0.05; this.ctx.rotate(rot);
+      const isMobile = this.width < 600;
+      // הקטנת הבונוסים במובייל ב-35%
+      const scale = isMobile ? 0.65 : 1.0;
+      this.ctx.scale(scale, scale);
+
       let color = '#fbbf24', icon = '💎';
       if(b.type === 'fire') { color = '#f97316'; icon = '🔥'; }
       else if(b.type === 'electric') { color = '#a855f7'; icon = '⚡'; }
@@ -775,6 +794,21 @@ export class GameEngine {
   useShield() { if(this.shields > 0 && this.shieldStrength < 2) { this.shields--; Sound.play('powerup'); this.shieldStrength = 2; this.onStatsUpdate({shields: this.shields, hasShield: true}); this.onFeedback("מגן!", true); } }
   usePotion() { if(this.potions > 0) { this.potions--; Sound.play('powerup'); this.timeSlowTimer = 450; this.onStatsUpdate({potions: this.potions}); this.onFeedback("זמן איטי!", true); } }
 
+  // מתודה חדשה לתנועה יחסית - מונעת קפיצות במגע ראשוני
+  movePlayer(dx: number, dy: number) {
+      if (!this.isPaused) {
+          this.player.x = Math.max(20, Math.min(this.width - 20, this.player.x + dx));
+          this.player.y = Math.max(this.height * 0.4, Math.min(this.height - 100, this.player.y + dy));
+      }
+  }
+
+  setPlayerPos(x: number, y: number) { 
+      if (!this.isPaused) { 
+          this.player.x = x; 
+          this.player.y = Math.max(this.height * 0.4, Math.min(y, this.height - 100)); 
+      } 
+  }
+
   startBossFight() { 
       this.bossDamageTaken = false;
       this.boss = { x: this.width / 2, y: -450, targetY: 220, maxHp: 250 + (this.level * 15), hp: 250 + (this.level * 15), currentText: "", frame: 0, attackRate: Math.max(45, 180 - (this.level * 2)) };
@@ -795,6 +829,4 @@ export class GameEngine {
       this.onFeedback("ניצחון!", true); 
       setTimeout(() => this.startRound(), 3000);
   }
-
-  setPlayerPos(x: number, y: number) { if (!this.isPaused) { this.player.x = x; this.player.y = Math.max(this.height * 0.4, Math.min(y, this.height - 100)); } }
 }
