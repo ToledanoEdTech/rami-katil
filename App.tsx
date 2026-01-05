@@ -46,6 +46,7 @@ function App() {
   // Teacher Mode State
   const [teacherSelectedIndices, setTeacherSelectedIndices] = useState<number[]>([]);
   const [teacherSearchTerm, setTeacherSearchTerm] = useState('');
+  const [teacherSelectedCategory, setTeacherSelectedCategory] = useState<'all' | 'berachot' | 'bava_kamma' | 'common'>('all');
   const [teacherAuthPass, setTeacherAuthPass] = useState('');
   const [isTeacherAuthenticated, setIsTeacherAuthenticated] = useState(false);
   
@@ -416,7 +417,7 @@ const equipSkin = (id: string) => {
   const nextSugia = transitionStats ? SUGIOT.find(s => s.requiredLevel > transitionStats.level) : null;
   const currentSugia = transitionStats ? SUGIOT.find(s => s.requiredLevel === transitionStats.level) : null;
 
-  // Filter dictionary for teacher mode with niqqud normalization
+  // Filter dictionary for teacher mode with niqqud normalization and category filtering
   const filteredTeacherDictionary = DICTIONARY.map((word, originalIndex) => ({ ...word, originalIndex }))
     .filter(w => {
       const search = teacherSearchTerm.toLowerCase();
@@ -424,13 +425,14 @@ const equipSkin = (id: string) => {
       const rawAramaic = w.aramaic.toLowerCase();
       const hebrew = w.hebrew.toLowerCase();
       
-      return normalizedAramaic.includes(search) || 
-             rawAramaic.includes(search) || 
-             hebrew.includes(search);
+      const matchesSearch = normalizedAramaic.includes(search) || rawAramaic.includes(search) || hebrew.includes(search);
+      const matchesCategory = teacherSelectedCategory === 'all' || w.cat === teacherSelectedCategory;
+      
+      return matchesSearch && matchesCategory;
     });
 
   return (
-    <div className="relative w-full h-screen h-[100dvh] bg-slate-950 text-white overflow-hidden select-none font-rubik" dir="rtl" style={{ touchAction: 'none' }}>
+    <div className="fixed inset-0 w-full bg-slate-950 text-white overflow-hidden select-none font-rubik" dir="rtl" style={{ touchAction: 'none' }}>
       <canvas ref={canvasRef} className="block w-full h-full" />
       
       {unlockNotification && (
@@ -609,12 +611,12 @@ const equipSkin = (id: string) => {
                           נתיב הסוגיות
                       </button>
                       <div className="grid grid-cols-2 gap-2 md:gap-4">
-                          <button onClick={() => navigateTo('SHOP')} className="bg-slate-800/80 p-2 md:p-5 rounded-xl border border-slate-700 text-xs md:text-xl font-bold transition-all shadow-lg">🛒 חנות</button>
-                          <button onClick={() => { fetchLeaderboard(); navigateTo('LEADERBOARD'); }} className="bg-amber-800/80 p-2 md:p-5 rounded-xl border border-amber-700 text-xs md:text-xl font-bold transition-all shadow-lg">🏆 אלופים</button>
+                          <button onClick={() => navigateTo('SHOP')} className="bg-slate-800/80 p-2 md:p-5 rounded-xl border border-slate-700 text-xs md:text-xl font-bold transition-all shadow-lg hover:scale-105 hover:border-amber-500/50 hover:shadow-amber-500/20 active:scale-95 active:translate-y-1">🛒 חנות</button>
+                          <button onClick={() => { fetchLeaderboard(); navigateTo('LEADERBOARD'); }} className="bg-amber-800/80 p-2 md:p-5 rounded-xl border border-amber-700 text-xs md:text-xl font-bold transition-all shadow-lg hover:scale-105 hover:border-amber-400/50 hover:shadow-amber-400/20 active:scale-95 active:translate-y-1">🏆 אלופים</button>
                       </div>
                       <div className="grid grid-cols-2 gap-2 md:gap-4">
-                          <button onClick={() => navigateTo('ACHIEVEMENTS')} className="bg-purple-800/80 p-2 md:p-5 rounded-xl border border-purple-700 text-xs md:text-xl font-bold transition-all shadow-lg">📜 הישגים</button>
-                          <button onClick={() => navigateTo('TEACHER')} className="bg-blue-800/80 p-2 md:p-5 rounded-xl border border-blue-700 text-xs md:text-xl font-bold transition-all shadow-lg flex items-center justify-center gap-2">🎓 מצב מורה</button>
+                          <button onClick={() => navigateTo('ACHIEVEMENTS')} className="bg-purple-800/80 p-2 md:p-5 rounded-xl border border-purple-700 text-xs md:text-xl font-bold transition-all shadow-lg hover:scale-105 hover:border-purple-400/50 hover:shadow-purple-400/20 active:scale-95 active:translate-y-1">📜 הישגים</button>
+                          <button onClick={() => navigateTo('TEACHER')} className="bg-blue-800/80 p-2 md:p-5 rounded-xl border border-blue-700 text-xs md:text-xl font-bold transition-all shadow-lg flex items-center justify-center gap-2 hover:scale-105 hover:border-blue-400/50 hover:shadow-blue-400/20 active:scale-95 active:translate-y-1">🎓 מצב מורה</button>
                       </div>
                       
                       <div className="hidden md:block">
@@ -660,7 +662,7 @@ const equipSkin = (id: string) => {
                       <h2 className="text-2xl md:text-6xl font-aramaic text-blue-400 font-black">ממשק מורה</h2>
                   </div>
 
-                  <div className="mb-4">
+                  <div className="mb-4 space-y-3">
                       <input 
                           type="text" 
                           placeholder="🔍 חפש מילה בארמית (גם ללא ניקוד) או תרגום..." 
@@ -668,6 +670,22 @@ const equipSkin = (id: string) => {
                           onChange={e => setTeacherSearchTerm(e.target.value)}
                           className="w-full bg-slate-900/80 border border-slate-700 rounded-2xl p-4 text-white outline-none focus:border-blue-500 backdrop-blur-md"
                       />
+                      <div className="flex flex-wrap gap-2 justify-center">
+                          {[
+                              { id: 'all', label: 'הכל' },
+                              { id: 'berachot', label: 'ברכות' },
+                              { id: 'bava_kamma', label: 'בבא קמא' },
+                              { id: 'common', label: 'נפוצות' }
+                          ].map(cat => (
+                              <button 
+                                  key={cat.id}
+                                  onClick={() => { setTeacherSelectedCategory(cat.id as any); Sound.play('ui_click'); }}
+                                  className={`px-4 py-2 rounded-full text-xs md:text-sm font-bold border transition-all ${teacherSelectedCategory === cat.id ? 'bg-blue-600 border-blue-400 text-white shadow-[0_0_10px_rgba(37,99,235,0.5)]' : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500'}`}
+                              >
+                                  {cat.label}
+                              </button>
+                          ))}
+                      </div>
                   </div>
 
                   <div className="flex-1 overflow-y-auto mb-6 bg-slate-900/40 rounded-3xl border border-slate-800 p-4 md:p-8 scrollbar-hide">
@@ -691,7 +709,7 @@ const equipSkin = (id: string) => {
                               );
                           })}
                           {filteredTeacherDictionary.length === 0 && (
-                              <div className="col-span-full py-12 text-center text-slate-500 text-xl font-bold">לא נמצאו מילים תואמות לחיפוש</div>
+                              <div className="col-span-full py-12 text-center text-slate-500 text-xl font-bold">לא נמצאו מילים תואמות לחיפוש או לקטגוריה</div>
                           )}
                       </div>
                   </div>
@@ -742,7 +760,7 @@ const equipSkin = (id: string) => {
                                       <div className="text-amber-900 font-black mb-1 md:mb-2">{isUnlocked ? String.fromCharCode(0x5D0 + (idx % 22)) : '🔒'}</div>
                                       <div className="text-amber-800/50 text-[8px] md:text-[10px] font-bold">{dafLabel}</div>
                                   </div>
-                                  <div className={`mt-2 md:mt-6 font-black text-[10px] md:text-base text-center leading-tight max-w-[80px] md:max-w-[140px] ${isUnlocked ? 'text-amber-950' : 'text-slate-400'}`}>{sugia.title}</div>
+                                  <div className={`mt-2 md:mt-6 font-black text-[10px] md:text-base text-center leading-tight max-w-[80px] md:max-w-140px] ${isUnlocked ? 'text-amber-950' : 'text-slate-400'}`}>{sugia.title}</div>
                               </div>
                           );
                       })}
@@ -846,7 +864,6 @@ const equipSkin = (id: string) => {
                                   <div className="text-3xl md:text-8xl">{ach.icon}</div>
                                   <div className="text-right flex-1">
                                       <h3 className="text-sm md:text-4xl font-black text-white mb-0.5 md:mb-1">{ach.title}</h3>
-                                      <h3 className="text-sm md:text-4xl font-black text-white mb-0.5 md:mb-1">{ach.title}</h3>
                                       <p className="text-[10px] md:text-xl text-slate-400 line-clamp-2 md:line-clamp-none">{ach.desc}</p>
                                   </div>
                                   {unlocked && <div className="text-green-400 font-black text-[10px] md:text-lg">הושלם!</div>}
@@ -876,20 +893,20 @@ const equipSkin = (id: string) => {
                         fetch(SCRIPT_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ name: playerName, class: playerClass, score: stats.score }) })
                           .then(() => { setLoading(false); alert('הציון נשמר!'); handleReturnToMenu(); })
                           .catch(() => { setLoading(false); alert('שגיאה בשמירה'); });
-                    }} disabled={loading} className="w-full bg-green-600 hover:bg-green-500 py-3 md:py-4 rounded-lg md:rounded-xl font-black text-white text-lg md:text-2xl shadow-xl transition-all disabled:opacity-50">
+                    }} disabled={loading} className="w-full bg-green-600 hover:bg-green-500 py-3 md:py-4 rounded-lg md:rounded-xl font-black text-white text-lg md:text-2xl shadow-xl transition-all disabled:opacity-50 hover:scale-[1.02] active:scale-95 border-b-4 border-green-900">
                         {loading ? 'שומר...' : 'שמור בטבלה'}
                     </button>
                   </div>
               </div>
               <div className="flex gap-2 md:gap-4 w-full max-w-md pb-12 md:pb-0">
-                  <button onClick={() => startGame(selectedSugia || undefined)} className="flex-1 bg-blue-600 px-3 py-3 md:px-8 md:py-5 rounded-xl md:rounded-2xl font-black text-sm md:text-xl transition-all shadow-lg active:scale-95">שוב</button>
+                  <button onClick={() => startGame(selectedSugia || undefined)} className="flex-1 bg-blue-600 px-3 py-3 md:px-8 md:py-5 rounded-xl md:rounded-2xl font-black text-sm md:text-xl transition-all shadow-lg hover:scale-105 hover:bg-blue-500 hover:shadow-blue-500/20 active:scale-95 border-b-4 border-blue-900">שוב</button>
                   <button onClick={() => {
                       if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
                       engineRef.current = null;
                       Sound.play('ui_click');
                       setGameState('MAP');
-                  }} className="flex-1 bg-amber-700 px-3 py-3 md:px-8 md:py-5 rounded-xl md:rounded-2xl font-black text-sm md:text-xl transition-all shadow-lg active:scale-95">מפה</button>
-                  <button onClick={handleReturnToMenu} className="flex-1 bg-slate-800 px-3 py-3 md:px-8 md:py-5 rounded-xl md:rounded-2xl font-black text-sm md:text-xl transition-all shadow-lg active:scale-95">תפריט</button>
+                  }} className="flex-1 bg-amber-700 px-3 py-3 md:px-8 md:py-5 rounded-xl md:rounded-2xl font-black text-sm md:text-xl transition-all shadow-lg hover:scale-105 hover:bg-amber-600 hover:shadow-amber-500/20 active:scale-95 border-b-4 border-amber-900">מפה</button>
+                  <button onClick={handleReturnToMenu} className="flex-1 bg-slate-800 px-3 py-3 md:px-8 md:py-5 rounded-xl md:rounded-2xl font-black text-sm md:text-xl transition-all shadow-lg hover:scale-105 hover:bg-slate-700 hover:shadow-slate-500/20 active:scale-95 border-b-4 border-slate-900">תפריט</button>
               </div>
           </div>
       )}

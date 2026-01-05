@@ -21,6 +21,10 @@
         margin: 0;
         padding: 0;
         overflow: hidden;
+        position: fixed;
+        width: 100%;
+        top: 0;
+        left: 0;
       }
       body {
         font-family: 'Rubik', sans-serif;
@@ -34,6 +38,14 @@
       canvas {
         image-rendering: pixelated;
         image-rendering: crisp-edges;
+      }
+      /* הסתרת גלגלת בכל הדפדפנים */
+      ::-webkit-scrollbar {
+        display: none;
+      }
+      * {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
       }
     </style>
   <script type="importmap">
