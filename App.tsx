@@ -43,6 +43,7 @@ function App() {
   const [isMobile, setIsMobile] = useState(false);
   const [customWordList, setCustomWordList] = useState<Word[] | null>(null);
   const [dynamicWords, setDynamicWords] = useState<Word[]>([]);
+  const [hasFetched, setHasFetched] = useState(false);
   
   // Teacher Mode State
   const [teacherSelectedIndices, setTeacherSelectedIndices] = useState<number[]>([]);
@@ -92,7 +93,7 @@ function App() {
   const [playerName, setPlayerName] = useState('');
   const [playerClass, setPlayerClass] = useState('');
 
-  // Combined Dictionary: Static + Dynamic
+  // Combined Dictionary: Static + Dynamic (Important: this is re-calculated every render)
   const fullDictionary = [...DICTIONARY, ...dynamicWords];
 
   // Fetch Data (Leaderboard + Dynamic Words)
@@ -106,29 +107,18 @@ function App() {
       if (data.dynamicWords) {
           setDynamicWords(data.dynamicWords);
       }
+      setHasFetched(true);
     } catch (error) {
       console.error('Error fetching data:', error);
+      setHasFetched(true); // Ensure we proceed even on error
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // Initial fetch
   useEffect(() => {
     fetchData();
-    const params = new URLSearchParams(window.location.search);
-    const wordParam = params.get('w');
-    if (wordParam) {
-      setTimeout(() => {
-          const indices = wordParam.split(',').map(Number).filter(n => !isNaN(n));
-          const filtered = indices.map(i => fullDictionary[i]).filter(Boolean);
-          if (filtered.length > 0) {
-            setCustomWordList(filtered);
-            setFeedback({ msg: "נבחר מילון מורה!", isGood: true });
-            setTimeout(() => setFeedback(null), 3000);
-          }
-      }, 2000);
-    }
-    
     Sound.init();
     const checkMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     setIsMobile(checkMobile);
@@ -136,6 +126,24 @@ function App() {
       Sound.startMusic('menu');
     }
   }, [fetchData]);
+
+  // Handle URL Parameter after data is fetched
+  useEffect(() => {
+    if (hasFetched) {
+      const params = new URLSearchParams(window.location.search);
+      const wordParam = params.get('w');
+      if (wordParam) {
+        const indices = wordParam.split(',').map(Number).filter(n => !isNaN(n));
+        // Use the current fullDictionary which now contains dynamic words
+        const filtered = indices.map(i => fullDictionary[i]).filter(Boolean);
+        if (filtered.length > 0) {
+          setCustomWordList(filtered);
+          setFeedback({ msg: "נבחר מילון מורה!", isGood: true });
+          setTimeout(() => setFeedback(null), 3000);
+        }
+      }
+    }
+  }, [hasFetched, dynamicWords.length]); // Re-run when fetch is done or dynamic words count changes
 
   const handleAddNewWord = async () => {
     if (!newWordAramaic || !newWordHebrew) return alert('נא למלא את כל השדות');
@@ -151,25 +159,24 @@ function App() {
     };
 
     try {
-      // שליחה כ-plain text עוקפת בעיות CORS של דפדפנים
       await fetch(SCRIPT_URL, {
         method: 'POST',
         mode: 'no-cors',
         body: JSON.stringify(payload)
       });
       
-      setFeedback({ msg: "המילה נוספה! מרענן רשימה...", isGood: true });
+      setFeedback({ msg: "המילה נוספה בהצלחה!", isGood: true });
       setNewWordAramaic('');
       setNewWordHebrew('');
       
-      // רענון הרשימה לאחר זמן קצר כדי שהשרת יתעדכן
+      // Refresh to show the new word in the list immediately
       setTimeout(() => {
           fetchData();
           setFeedback(null);
-      }, 2500);
+      }, 2000);
       
     } catch (err) {
-      alert('שגיאה בשליחה לשרת');
+      alert('שגיאה בתקשורת עם השרת');
     } finally {
       setIsAddingWord(false);
     }
@@ -216,6 +223,9 @@ function App() {
     setDisplayScore(0);
     setIsUnitComplete(false);
     
+    // Choose the dictionary to pass to the engine
+    const dictionaryToUse = customWordList || fullDictionary.filter(w => w.cat === config.category);
+
     setStats({
         score: 0, level: sugia ? sugia.requiredLevel : 1, lives: 3, combo: 0, coins: 0, 
         bombs: inventory.bombs, shields: inventory.shields, potions: inventory.potions,
@@ -242,7 +252,7 @@ function App() {
                   location: sugia?.location || 'nehardea',
                   modifier: sugia?.modifier || 'wave',
                   sugiaTitle: sugia?.title || (customWordList ? 'תרגול מורה' : 'פתיחת הסוגיא'),
-                  customDictionary: customWordList || fullDictionary.filter(w => w.cat === config.category)
+                  customDictionary: dictionaryToUse
                 },
                 { bombs: inventory.bombs, shields: inventory.shields, potions: inventory.potions },
                 {
