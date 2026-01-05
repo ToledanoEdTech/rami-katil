@@ -5,11 +5,12 @@ export const Sound = {
   isMuted: false,
   noiseBuffer: null as AudioBuffer | null,
   
-  // הגדרת קבצי המוזיקה
-  menuTrack: new Audio('./menu.mp3'),
-  gameTrack: new Audio('./game.mp3'),
+  // Initialize as null to prevent immediate errors on import
+  menuTrack: null as HTMLAudioElement | null,
+  gameTrack: null as HTMLAudioElement | null,
   
   currentMode: 'menu' as 'menu' | 'game',
+  musicEnabled: true, // Flag to disable music if files are missing
 
   init: function() {
     // אתחול הקונטקסט לאפקטים (יריות, פיצוצים)
@@ -25,28 +26,59 @@ export const Sound = {
       console.warn("AudioContext init failed:", e);
     }
 
-    // הגדרות מוזיקה
-    this.menuTrack.loop = true;
-    this.menuTrack.volume = 0.5; // עוצמת שמע תפריט
+    // אתחול וטיפול בקבצי מוזיקה עם הגנה מפני שגיאות
+    if (!this.menuTrack) {
+        try {
+            this.menuTrack = new Audio('./menu.mp3');
+            this.menuTrack.loop = true;
+            this.menuTrack.volume = 0.5;
+            this.menuTrack.addEventListener('error', (e) => {
+                console.warn("Menu music file not found or unsupported. Disabling music.");
+                this.musicEnabled = false;
+            });
+        } catch (e) {
+            console.warn("Failed to create menu audio element", e);
+            this.musicEnabled = false;
+        }
+    }
 
-    this.gameTrack.loop = true;
-    this.gameTrack.volume = 0.35; // עוצמת שמע משחק (קצת נמוך יותר כדי לא להפריע לאפקטים)
+    if (!this.gameTrack) {
+        try {
+            this.gameTrack = new Audio('./game.mp3');
+            this.gameTrack.loop = true;
+            this.gameTrack.volume = 0.35;
+            this.gameTrack.addEventListener('error', (e) => {
+                console.warn("Game music file not found or unsupported. Disabling music.");
+                this.musicEnabled = false;
+            });
+        } catch (e) {
+            console.warn("Failed to create game audio element", e);
+            this.musicEnabled = false;
+        }
+    }
   },
 
   // פונקציה לניגון מוזיקת תפריט
   playMenuMusic: function() {
     this.currentMode = 'menu';
-    if (this.isMuted) return;
+    if (this.isMuted || !this.musicEnabled || !this.menuTrack) return;
 
     // עצירת מוזיקת משחק אם היא מנגנת
-    this.gameTrack.pause();
-    this.gameTrack.currentTime = 0;
+    if (this.gameTrack) {
+        this.gameTrack.pause();
+        this.gameTrack.currentTime = 0;
+    }
 
     // ניסיון לנגן תפריט
     const playPromise = this.menuTrack.play();
     if (playPromise !== undefined) {
       playPromise.catch(error => {
-        console.log("Autoplay prevented for menu music. Waiting for interaction.");
+        // טיפול שקט בשגיאות טעינה או Autoplay
+        if (error.name === 'NotSupportedError' || error.message.includes('supported sources')) {
+             this.musicEnabled = false;
+        } else {
+             console.log("Autoplay waiting for interaction");
+        }
       });
     }
   },
@@ -54,27 +86,37 @@ export const Sound = {
   // פונקציה לניגון מוזיקת משחק
   playGameMusic: function() {
     this.currentMode = 'game';
-    if (this.isMuted) return;
+    if (this.isMuted || !this.musicEnabled || !this.gameTrack) return;
 
     // עצירת מוזיקת תפריט אם היא מנגנת
-    this.menuTrack.pause();
-    this.menuTrack.currentTime = 0;
+    if (this.menuTrack) {
+        this.menuTrack.pause();
+        this.menuTrack.currentTime = 0;
+    }
 
     // ניסיון לנגן משחק
     const playPromise = this.gameTrack.play();
     if (playPromise !== undefined) {
       playPromise.catch(error => {
-        console.log("Autoplay prevented for game music.");
+        if (error.name === 'NotSupportedError' || error.message.includes('supported sources')) {
+             this.musicEnabled = false;
+        } else {
+             console.log("Autoplay waiting for interaction");
+        }
       });
     }
   },
 
   // פונקציה כללית לעצירת כל המוזיקה
   stopMusic: function() {
-    this.menuTrack.pause();
-    this.menuTrack.currentTime = 0;
-    this.gameTrack.pause();
-    this.gameTrack.currentTime = 0;
+    if (this.menuTrack) {
+        this.menuTrack.pause();
+        this.menuTrack.currentTime = 0;
+    }
+    if (this.gameTrack) {
+        this.gameTrack.pause();
+        this.gameTrack.currentTime = 0;
+    }
   },
 
   // פונקציה שנקראת בלחיצה הראשונה של המשתמש
@@ -84,11 +126,11 @@ export const Sound = {
     }
 
     // אם אנחנו לא מושתקים, נסה לנגן את הטרק המתאים למצב הנוכחי
-    if (!this.isMuted) {
-      if (this.currentMode === 'menu' && this.menuTrack.paused) {
-        this.menuTrack.play();
-      } else if (this.currentMode === 'game' && this.gameTrack.paused) {
-        this.gameTrack.play();
+    if (!this.isMuted && this.musicEnabled) {
+      if (this.currentMode === 'menu' && this.menuTrack && this.menuTrack.paused) {
+        this.menuTrack.play().catch(() => {});
+      } else if (this.currentMode === 'game' && this.gameTrack && this.gameTrack.paused) {
+        this.gameTrack.play().catch(() => {});
       }
     }
   },
