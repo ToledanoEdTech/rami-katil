@@ -42,6 +42,7 @@ function App() {
   const [selectedSugia, setSelectedSugia] = useState<Sugia | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [customWordList, setCustomWordList] = useState<Word[] | null>(null);
+  const [dynamicWords, setDynamicWords] = useState<Word[]>([]);
   
   // Teacher Mode State
   const [teacherSelectedIndices, setTeacherSelectedIndices] = useState<number[]>([]);
@@ -50,6 +51,12 @@ function App() {
   const [teacherAuthPass, setTeacherAuthPass] = useState('');
   const [isTeacherAuthenticated, setIsTeacherAuthenticated] = useState(false);
   
+  // Add Word Form State
+  const [newWordAramaic, setNewWordAramaic] = useState('');
+  const [newWordHebrew, setNewWordHebrew] = useState('');
+  const [newWordCategory, setNewWordCategory] = useState<'common' | 'berachot' | 'bava_kamma'>('common');
+  const [isAddingWord, setIsAddingWord] = useState(false);
+
   const [inventory, setInventory] = useState(() => ({
     bombs: safeInt('bombs', 1),
     shields: safeInt('shields', 0),
@@ -85,18 +92,41 @@ function App() {
   const [playerName, setPlayerName] = useState('');
   const [playerClass, setPlayerClass] = useState('');
 
-  // Check for Teacher Mode Link on mount
+  // Combined Dictionary: Static + Dynamic
+  const fullDictionary = [...DICTIONARY, ...dynamicWords];
+
+  // Fetch Data (Leaderboard + Dynamic Words)
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(SCRIPT_URL);
+      if (!response.ok) throw new Error('Network response was not ok');
+      const data = await response.json();
+      if (data.leaderboard) setLeaderboard(data.leaderboard);
+      if (data.dynamicWords) {
+          setDynamicWords(data.dynamicWords);
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
+    fetchData();
     const params = new URLSearchParams(window.location.search);
     const wordParam = params.get('w');
     if (wordParam) {
-      const indices = wordParam.split(',').map(Number).filter(n => !isNaN(n));
-      const filtered = indices.map(i => DICTIONARY[i]).filter(Boolean);
-      if (filtered.length > 0) {
-        setCustomWordList(filtered);
-        setFeedback({ msg: "נבחר מילון מורה!", isGood: true });
-        setTimeout(() => setFeedback(null), 3000);
-      }
+      setTimeout(() => {
+          const indices = wordParam.split(',').map(Number).filter(n => !isNaN(n));
+          const filtered = indices.map(i => fullDictionary[i]).filter(Boolean);
+          if (filtered.length > 0) {
+            setCustomWordList(filtered);
+            setFeedback({ msg: "נבחר מילון מורה!", isGood: true });
+            setTimeout(() => setFeedback(null), 3000);
+          }
+      }, 2000);
     }
     
     Sound.init();
@@ -105,7 +135,45 @@ function App() {
     if (gameState === 'MENU') {
       Sound.startMusic('menu');
     }
-  }, []);
+  }, [fetchData]);
+
+  const handleAddNewWord = async () => {
+    if (!newWordAramaic || !newWordHebrew) return alert('נא למלא את כל השדות');
+    setIsAddingWord(true);
+    
+    const payload = {
+        action: 'addWord',
+        word: {
+            aramaic: newWordAramaic,
+            hebrew: newWordHebrew,
+            cat: newWordCategory
+        }
+    };
+
+    try {
+      // שליחה כ-plain text עוקפת בעיות CORS של דפדפנים
+      await fetch(SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        body: JSON.stringify(payload)
+      });
+      
+      setFeedback({ msg: "המילה נוספה! מרענן רשימה...", isGood: true });
+      setNewWordAramaic('');
+      setNewWordHebrew('');
+      
+      // רענון הרשימה לאחר זמן קצר כדי שהשרת יתעדכן
+      setTimeout(() => {
+          fetchData();
+          setFeedback(null);
+      }, 2500);
+      
+    } catch (err) {
+      alert('שגיאה בשליחה לשרת');
+    } finally {
+      setIsAddingWord(false);
+    }
+  };
 
   useEffect(() => {
     if (displayScore < stats.score) {
@@ -115,22 +183,6 @@ function App() {
       return () => clearTimeout(timer);
     }
   }, [stats.score, displayScore]);
-
-  const fetchLeaderboard = useCallback(async () => {
-    setLoading(true);
-    try {
-      const response = await fetch(SCRIPT_URL);
-      if (!response.ok) throw new Error('Network response was not ok');
-      const data = await response.json();
-      if (Array.isArray(data)) {
-        setLeaderboard(data);
-      }
-    } catch (error) {
-      console.error('Error fetching leaderboard:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
 
   const unlockAchievement = useCallback((id: string) => {
     setUnlockedAchievements(prev => {
@@ -151,7 +203,6 @@ function App() {
     if (engineRef.current) {
         const deltaTime = lastTimeRef.current ? (time - lastTimeRef.current) / (1000 / 60) : 1;
         lastTimeRef.current = time;
-        
         engineRef.current.update(Math.min(deltaTime, 2.0)); 
         engineRef.current.draw();
         animationFrameId.current = requestAnimationFrame(gameLoop);
@@ -191,7 +242,7 @@ function App() {
                   location: sugia?.location || 'nehardea',
                   modifier: sugia?.modifier || 'wave',
                   sugiaTitle: sugia?.title || (customWordList ? 'תרגול מורה' : 'פתיחת הסוגיא'),
-                  customDictionary: customWordList || undefined
+                  customDictionary: customWordList || fullDictionary.filter(w => w.cat === config.category)
                 },
                 { bombs: inventory.bombs, shields: inventory.shields, potions: inventory.potions },
                 {
@@ -255,6 +306,7 @@ function App() {
 
   const navigateTo = (state: GameState) => {
     Sound.play('ui_click');
+    if (state === 'LEADERBOARD') fetchData();
     setGameState(state);
   };
 
@@ -267,7 +319,6 @@ function App() {
     const baseUrl = window.location.origin + window.location.pathname;
     const link = `${baseUrl}?w=${teacherSelectedIndices.join(',')}`;
     
-    // Copy to clipboard
     navigator.clipboard.writeText(link).then(() => {
       alert("הקישור הועתק ללוח! שתף אותו עם התלמידים.");
       handleReturnToMenu();
@@ -288,7 +339,6 @@ function App() {
       
       const handleMove = (e: any) => {
           if(!engineRef.current || gameState !== 'PLAYING' || isInputOnUI.current || isUnitComplete) return;
-          
           if (e.touches) {
               const touch = e.touches[0];
               if (lastTouchRef.current) {
@@ -305,14 +355,11 @@ function App() {
 
       const handleTouchStart = (e: TouchEvent) => {
           if(!engineRef.current || gameState !== 'PLAYING' || isUnitComplete) return;
-          
-          // בדיקה האם המגע התחיל על אלמנט UI
           const target = e.target as HTMLElement;
           if (target.closest('[data-ui="true"]')) {
             isInputOnUI.current = true;
             return;
           }
-
           isInputOnUI.current = false;
           lastTouchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
       };
@@ -324,23 +371,20 @@ function App() {
 
       const handleInput = (e: any) => { 
           if(!engineRef.current || isPaused || gameState !== 'PLAYING' || isUnitComplete) return; 
-          
           const target = e.target as HTMLElement;
           if (target.closest('[data-ui="true"]')) return;
-
           if (!isMobile) {
             engineRef.current.fire(); 
           }
       };
       
       const handleKey = (e: KeyboardEvent) => {
-          if (e.target instanceof HTMLInputElement) return;
+          if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
           if (e.code === 'Escape' && gameState === 'PLAYING') {
               if (engineRef.current) { const paused = engineRef.current.togglePause(); setIsPaused(paused); Sound.play('ui_click'); }
               return;
           }
           if(!engineRef.current || isPaused || gameState !== 'PLAYING' || isUnitComplete) return;
-          
           if(e.code === 'KeyA') engineRef.current.useBomb();
           if(e.code === 'KeyS') engineRef.current.useShield();
           if(e.code === 'KeyD') engineRef.current.usePotion();
@@ -372,7 +416,6 @@ function App() {
       alert(`פריט זה נעול! עליך להשיג את ההישג "${achName}" כדי לקנות אותו.`);
       return;
     }
-
     if (coins >= item.price) {
         const newCoins = coins - item.price;
         setCoins(newCoins);
@@ -417,17 +460,15 @@ const equipSkin = (id: string) => {
   const nextSugia = transitionStats ? SUGIOT.find(s => s.requiredLevel > transitionStats.level) : null;
   const currentSugia = transitionStats ? SUGIOT.find(s => s.requiredLevel === transitionStats.level) : null;
 
-  // Filter dictionary for teacher mode with niqqud normalization and category filtering
-  const filteredTeacherDictionary = DICTIONARY.map((word, originalIndex) => ({ ...word, originalIndex }))
+  // Filter combined dictionary for teacher mode
+  const filteredTeacherDictionary = fullDictionary.map((word, originalIndex) => ({ ...word, originalIndex }))
     .filter(w => {
       const search = teacherSearchTerm.toLowerCase();
       const normalizedAramaic = removeNiqqud(w.aramaic).toLowerCase();
       const rawAramaic = w.aramaic.toLowerCase();
       const hebrew = w.hebrew.toLowerCase();
-      
       const matchesSearch = normalizedAramaic.includes(search) || rawAramaic.includes(search) || hebrew.includes(search);
       const matchesCategory = teacherSelectedCategory === 'all' || w.cat === teacherSelectedCategory;
-      
       return matchesSearch && matchesCategory;
     });
 
@@ -532,28 +573,7 @@ const equipSkin = (id: string) => {
                             </div>
                         </div>
 
-                        <div className="mb-8 text-right bg-black/30 p-4 md:p-6 rounded-3xl border border-amber-500/10 shadow-inner">
-                            <div className="text-amber-500 font-black text-[10px] md:text-sm mb-2 uppercase tracking-[0.2em] border-b border-amber-500/20 pb-2">לקראת היחידה הבאה:</div>
-                            {nextSugia ? (
-                              <div className="flex flex-col gap-1">
-                                <div className="text-xl md:text-3xl font-aramaic font-black text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]">
-                                  עלית רמה! <span className="text-amber-400">{nextSugia.title}</span>
-                                </div>
-                                <div className="text-sm md:text-xl text-slate-300 font-medium italic leading-relaxed line-clamp-2 md:line-clamp-none">
-                                  {nextSugia.description}
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="text-xl font-aramaic font-black text-amber-400 text-center">
-                                כל הכבוד! סיימת את כל הסוגיות במסכת!
-                              </div>
-                            )}
-                        </div>
-
-                        <button 
-                            onClick={proceedToNextSugia} 
-                            className="w-full bg-gradient-to-r from-amber-600 to-yellow-500 p-4 md:p-5 rounded-2xl text-xl md:text-2xl font-black shadow-xl hover:scale-105 active:scale-95 transition-all border-b-4 border-amber-900 text-slate-950"
-                        >
+                        <button onClick={proceedToNextSugia} className="w-full bg-gradient-to-r from-amber-600 to-yellow-500 p-4 md:p-5 rounded-2xl text-xl md:text-2xl font-black shadow-xl hover:scale-105 active:scale-95 transition-all border-b-4 border-amber-900 text-slate-950">
                             עבור לסוגיא הבאה
                         </button>
                     </div>
@@ -607,18 +627,17 @@ const equipSkin = (id: string) => {
                         </div>
                       )}
 
-                      <button onClick={() => navigateTo('MAP')} className="group relative bg-gradient-to-r from-amber-700 to-amber-500 p-4 md:p-6 rounded-2xl text-xl md:text-4xl font-black shadow-[0_0_30px_rgba(251,191,36,0.4)] hover:scale-105 transition-all border-b-4 border-amber-900 active:translate-y-1 active:border-b-0 overflow-hidden">
+                      <button onClick={() => navigateTo('MAP')} className="group relative bg-gradient-to-r from-amber-700 to-amber-500 p-4 md:p-6 rounded-2xl text-xl md:text-4xl font-black shadow-[0_0_30px_rgba(251,191,36,0.4)] hover:scale-105 transition-all border-b-4 border-amber-900 active:translate-y-1 active:border-b-0 overflow-hidden text-white">
                           נתיב הסוגיות
                       </button>
-                      <div className="grid grid-cols-2 gap-2 md:gap-4">
+                      <div className="grid grid-cols-2 gap-2 md:gap-4 text-white">
                           <button onClick={() => navigateTo('SHOP')} className="bg-slate-800/80 p-2 md:p-5 rounded-xl border border-slate-700 text-xs md:text-xl font-bold transition-all shadow-lg hover:scale-105 hover:border-amber-500/50 hover:shadow-amber-500/20 active:scale-95 active:translate-y-1">🛒 חנות</button>
-                          <button onClick={() => { fetchLeaderboard(); navigateTo('LEADERBOARD'); }} className="bg-amber-800/80 p-2 md:p-5 rounded-xl border border-amber-700 text-xs md:text-xl font-bold transition-all shadow-lg hover:scale-105 hover:border-amber-400/50 hover:shadow-amber-400/20 active:scale-95 active:translate-y-1">🏆 אלופים</button>
+                          <button onClick={() => navigateTo('LEADERBOARD')} className="bg-amber-800/80 p-2 md:p-5 rounded-xl border border-amber-700 text-xs md:text-xl font-bold transition-all shadow-lg hover:scale-105 hover:border-amber-400/50 hover:shadow-amber-400/20 active:scale-95 active:translate-y-1">🏆 אלופים</button>
                       </div>
-                      <div className="grid grid-cols-2 gap-2 md:gap-4">
+                      <div className="grid grid-cols-2 gap-2 md:gap-4 text-white">
                           <button onClick={() => navigateTo('ACHIEVEMENTS')} className="bg-purple-800/80 p-2 md:p-5 rounded-xl border border-purple-700 text-xs md:text-xl font-bold transition-all shadow-lg hover:scale-105 hover:border-purple-400/50 hover:shadow-purple-400/20 active:scale-95 active:translate-y-1">📜 הישגים</button>
                           <button onClick={() => navigateTo('TEACHER')} className="bg-blue-800/80 p-2 md:p-5 rounded-xl border border-blue-700 text-xs md:text-xl font-bold transition-all shadow-lg flex items-center justify-center gap-2 hover:scale-105 hover:border-blue-400/50 hover:shadow-blue-400/20 active:scale-95 active:translate-y-1">🎓 מצב מורה</button>
                       </div>
-                      
                       <div className="hidden md:block">
                         <ControlsDisplay />
                       </div>
@@ -631,24 +650,11 @@ const equipSkin = (id: string) => {
           <div className="absolute inset-0 bg-slate-950 flex flex-col items-center justify-center p-6 z-[100] h-full">
               <div className="bg-slate-900 p-8 rounded-3xl border border-slate-700 shadow-2xl max-w-sm w-full text-center">
                   <h2 className="text-3xl font-aramaic text-blue-400 mb-6">כניסת מורה</h2>
-                  <input 
-                      type="password" 
-                      placeholder="הכנס קוד גישה" 
-                      value={teacherAuthPass}
-                      onChange={e => setTeacherAuthPass(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-xl p-4 text-center text-white mb-6 outline-none focus:border-blue-500 transition-colors"
-                  />
+                  <input type="password" placeholder="הכנס קוד גישה" value={teacherAuthPass} onChange={e => setTeacherAuthPass(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl p-4 text-center text-white mb-6 outline-none focus:border-blue-500 transition-colors" />
                   <div className="flex gap-4">
-                      <button onClick={() => {
-                          if(teacherAuthPass === '123123') {
-                              setIsTeacherAuthenticated(true);
-                              Sound.play('powerup');
-                          } else {
-                              alert('קוד שגוי!');
-                              setTeacherAuthPass('');
-                          }
-                      }} className="flex-1 bg-blue-600 p-4 rounded-xl font-black">כניסה</button>
-                      <button onClick={handleReturnToMenu} className="flex-1 bg-slate-800 p-4 rounded-xl font-black">ביטול</button>
+                      <button onClick={() => { if(teacherAuthPass === '123123') { setIsTeacherAuthenticated(true); Sound.play('powerup'); fetchData(); } else { alert('קוד שגוי!'); setTeacherAuthPass(''); } }} className="flex-1 bg-blue-600 p-4 rounded-xl font-black text-white">כניסה</button>
+                      <button onClick={handleReturnToMenu} className="flex-1 bg-slate-800 p-4 rounded-xl font-black text-white">ביטול</button>
                   </div>
               </div>
           </div>
@@ -656,74 +662,94 @@ const equipSkin = (id: string) => {
 
       {gameState === 'TEACHER' && isTeacherAuthenticated && (
           <div className="absolute inset-0 bg-slate-950 flex flex-col z-[100] p-4 md:p-8 overflow-hidden h-full">
-              <div className="max-w-4xl w-full mx-auto flex flex-col h-full">
-                  <div className="flex justify-between items-center mb-6 md:mb-8 border-b border-slate-800 pb-4">
+              <div className="max-w-4xl w-full mx-auto flex flex-col h-full text-white">
+                  <div className="flex justify-between items-center mb-6 border-b border-slate-800 pb-4">
                       <button onClick={handleReturnToMenu} className="bg-slate-800 px-4 py-2 md:px-8 md:py-3 rounded-xl font-bold text-xs md:text-lg">חזור</button>
                       <h2 className="text-2xl md:text-6xl font-aramaic text-blue-400 font-black">ממשק מורה</h2>
                   </div>
 
-                  <div className="mb-4 space-y-3">
-                      <input 
-                          type="text" 
-                          placeholder="🔍 חפש מילה בארמית (גם ללא ניקוד) או תרגום..." 
-                          value={teacherSearchTerm}
-                          onChange={e => setTeacherSearchTerm(e.target.value)}
-                          className="w-full bg-slate-900/80 border border-slate-700 rounded-2xl p-4 text-white outline-none focus:border-blue-500 backdrop-blur-md"
-                      />
-                      <div className="flex flex-wrap gap-2 justify-center">
-                          {[
-                              { id: 'all', label: 'הכל' },
-                              { id: 'berachot', label: 'ברכות' },
-                              { id: 'bava_kamma', label: 'בבא קמא' },
-                              { id: 'common', label: 'נפוצות' }
-                          ].map(cat => (
-                              <button 
-                                  key={cat.id}
-                                  onClick={() => { setTeacherSelectedCategory(cat.id as any); Sound.play('ui_click'); }}
-                                  className={`px-4 py-2 rounded-full text-xs md:text-sm font-bold border transition-all ${teacherSelectedCategory === cat.id ? 'bg-blue-600 border-blue-400 text-white shadow-[0_0_10px_rgba(37,99,235,0.5)]' : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500'}`}
-                              >
-                                  {cat.label}
-                              </button>
-                          ))}
-                      </div>
-                  </div>
-
-                  <div className="flex-1 overflow-y-auto mb-6 bg-slate-900/40 rounded-3xl border border-slate-800 p-4 md:p-8 scrollbar-hide">
-                      <p className="text-slate-400 text-sm md:text-xl mb-6 text-center">בחר את המילים שיופיעו בשיעור:</p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 md:gap-4">
-                          {filteredTeacherDictionary.map((word) => {
-                              const isSelected = teacherSelectedIndices.includes(word.originalIndex);
-                              return (
-                                  <div key={word.originalIndex} onClick={() => toggleTeacherWordSelection(word.originalIndex)}
-                                    className={`p-3 md:p-5 rounded-2xl border-2 flex justify-between items-center transition-all cursor-pointer group
-                                        ${isSelected ? 'border-blue-500 bg-blue-900/30' : 'border-slate-800 bg-slate-900/50 hover:border-slate-600'}
-                                    `}>
-                                      <div className="text-right">
-                                          <div className="font-aramaic text-lg md:text-3xl text-white">{word.aramaic}</div>
-                                          <div className="text-[10px] md:text-sm text-slate-500 font-bold">{word.hebrew}</div>
-                                      </div>
-                                      <div className={`w-6 h-6 md:w-8 md:h-8 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-blue-500 border-blue-500' : 'border-slate-700'}`}>
-                                          {isSelected && <span className="text-white text-xs md:text-lg">✓</span>}
-                                      </div>
-                                  </div>
-                              );
-                          })}
-                          {filteredTeacherDictionary.length === 0 && (
-                              <div className="col-span-full py-12 text-center text-slate-500 text-xl font-bold">לא נמצאו מילים תואמות לחיפוש או לקטגוריה</div>
-                          )}
-                      </div>
-                  </div>
-
-                  <div className="bg-slate-900/80 p-4 md:p-8 rounded-3xl border-t-4 border-blue-500 shadow-2xl animate-slide-up mb-2">
-                      <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-                          <div className="text-right">
-                              <div className="text-white font-black text-lg md:text-3xl">נבחרו {teacherSelectedIndices.length} מילים</div>
-                              <div className="text-slate-400 text-xs md:text-lg">לחץ על הכפתור כדי להעתיק את הקישור לשיעור</div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full overflow-hidden">
+                    {/* Left Side: Word Selector */}
+                    <div className="flex flex-col h-full overflow-hidden bg-slate-900/40 p-4 rounded-3xl border border-slate-800">
+                        <h3 className="text-white font-bold mb-4 text-center">בניית שיעור מתוך המילון</h3>
+                        
+                        <div className="space-y-3 mb-4">
+                          <input type="text" placeholder="🔍 חפש מילה..." value={teacherSearchTerm} onChange={e => setTeacherSearchTerm(e.target.value)}
+                              className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white outline-none focus:border-blue-500" />
+                          
+                          <div className="flex flex-wrap gap-2 justify-center">
+                              {[
+                                  { id: 'all', label: 'הכל' },
+                                  { id: 'berachot', label: 'ברכות' },
+                                  { id: 'bava_kamma', label: 'בבא קמא' },
+                                  { id: 'common', label: 'נפוצות' }
+                              ].map(cat => (
+                                  <button 
+                                      key={cat.id}
+                                      onClick={() => { setTeacherSelectedCategory(cat.id as any); Sound.play('ui_click'); }}
+                                      className={`px-3 py-1.5 rounded-full text-[10px] md:text-xs font-bold border transition-all ${teacherSelectedCategory === cat.id ? 'bg-blue-600 border-blue-400 text-white shadow-lg' : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500'}`}
+                                  >
+                                      {cat.label}
+                                  </button>
+                              ))}
                           </div>
-                          <button onClick={generateTeacherLink} className="w-full md:w-auto bg-blue-600 hover:bg-blue-500 px-10 py-4 md:px-20 md:py-6 rounded-2xl text-xl md:text-4xl font-black shadow-xl active:scale-95 border-b-4 md:border-b-8 border-blue-900 transition-all">
-                              צור קישור והעתק ללוח
-                          </button>
-                      </div>
+                        </div>
+                        
+                        <div className="flex-1 overflow-y-auto space-y-2 mb-4 scrollbar-hide">
+                            {filteredTeacherDictionary.length === 0 ? (
+                                <div className="text-center text-slate-500 py-10">אין מילים בקטגוריה זו</div>
+                            ) : filteredTeacherDictionary.map((word) => {
+                                const isSelected = teacherSelectedIndices.includes(word.originalIndex);
+                                return (
+                                    <div key={word.originalIndex} onClick={() => toggleTeacherWordSelection(word.originalIndex)}
+                                      className={`p-3 rounded-xl border-2 flex justify-between items-center transition-all cursor-pointer group
+                                          ${isSelected ? 'border-blue-500 bg-blue-900/30' : 'border-slate-800 bg-slate-900/50 hover:border-slate-600'}`}>
+                                        <div className="text-right">
+                                            <div className="font-aramaic text-lg text-white">{word.aramaic}</div>
+                                            <div className="text-[10px] text-slate-500 font-bold">{word.hebrew}</div>
+                                        </div>
+                                        <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-blue-500 border-blue-500' : 'border-slate-700'}`}>
+                                            {isSelected && <span className="text-white text-xs">✓</span>}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        <button onClick={generateTeacherLink} className="bg-blue-600 py-4 rounded-xl font-black text-lg active:scale-95 transition-all text-white">צור קישור לשיעור ({teacherSelectedIndices.length})</button>
+                    </div>
+
+                    {/* Right Side: Add New Word */}
+                    <div className="bg-slate-900/80 p-6 rounded-3xl border border-blue-500/30 flex flex-col">
+                        <h3 className="text-blue-400 font-black text-xl mb-6 text-center">הוספת מילה קבועה למילון</h3>
+                        <div className="space-y-4 flex-1">
+                            <div>
+                                <label className="text-slate-400 text-xs block mb-1">מילה בארמית (עם ניקוד)</label>
+                                <input type="text" value={newWordAramaic} onChange={e => setNewWordAramaic(e.target.value)} placeholder="לדוגמא: תַּנְיָא"
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-4 text-right text-white outline-none focus:border-blue-500" />
+                            </div>
+                            <div>
+                                <label className="text-slate-400 text-xs block mb-1">תרגום לעברית</label>
+                                <input type="text" value={newWordHebrew} onChange={e => setNewWordHebrew(e.target.value)} placeholder="לדוגמא: שנויה בברייתא"
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-4 text-right text-white outline-none focus:border-blue-500" />
+                            </div>
+                            <div>
+                                <label className="text-slate-400 text-xs block mb-1">קטגוריה</label>
+                                <select value={newWordCategory} onChange={e => setNewWordCategory(e.target.value as any)}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-blue-500">
+                                    <option value="common">מילים נפוצות</option>
+                                    <option value="berachot">מסכת ברכות</option>
+                                    <option value="bava_kamma">מסכת בבא קמא</option>
+                                </select>
+                            </div>
+                            <div className="p-4 bg-blue-900/20 rounded-xl border border-blue-800 text-xs text-blue-300">
+                                * המילים שתספו יישמרו בגוגל שיטס ויופיעו מיד ברשימה לבחירה.
+                            </div>
+                        </div>
+                        <button onClick={handleAddNewWord} disabled={isAddingWord}
+                            className="mt-6 w-full bg-blue-500 hover:bg-blue-400 py-5 rounded-2xl font-black text-xl shadow-xl active:scale-95 transition-all disabled:opacity-50 text-white">
+                            {isAddingWord ? 'מוסיף...' : 'הוסף למילון הקבוע'}
+                        </button>
+                    </div>
                   </div>
               </div>
           </div>
@@ -746,16 +772,14 @@ const equipSkin = (id: string) => {
                           const isUnlocked = customWordList ? true : (maxLevelReached >= sugia.requiredLevel);
                           const isSelected = selectedSugia?.id === sugia.id;
                           const dafLabel = sugia.title.split(' ')[0] + ' ' + sugia.title.split(' ')[1];
-
                           return (
                               <div key={sugia.id} className="relative group flex flex-col items-center">
                                   {idx < SUGIOT.length - 1 && (
                                     <div className={`absolute top-12 md:top-24 left-[5rem] md:left-[10rem] w-8 md:w-20 h-1 ${customWordList || maxLevelReached >= SUGIOT[idx+1].requiredLevel ? 'bg-amber-600' : 'bg-amber-900/10'}`}></div>
                                   )}
-
                                   <div onClick={() => { if(isUnlocked) { Sound.play('ui_click'); setSelectedSugia(sugia); } }}
                                       className={`w-20 h-24 md:w-36 md:h-48 rounded-lg border-2 flex flex-col items-center justify-center text-xl md:text-4xl font-aramaic transition-all cursor-pointer relative shadow-2xl
-                                          ${isUnlocked ? (isSelected ? 'border-amber-600 bg-amber-50 scale-110 -translate-y-2 md:-translate-y-4 ring-4 ring-amber-400/20' : 'border-amber-900/30 bg-white hover:border-amber-700') : 'border-slate-300 bg-slate-100 grayscale opacity-40 cursor-not-allowed'}`}>
+                                          ${isUnlocked ? (isSelected ? 'border-amber-600 bg-amber-50 scale-110 -translate-y-2 md:-translate-y-4 ring-4 ring-amber-400/20 shadow-amber-900/30' : 'border-amber-900/30 bg-white hover:border-amber-700 hover:scale-105') : 'border-slate-300 bg-slate-100 grayscale opacity-40 cursor-not-allowed'}`}>
                                       <div className="text-amber-900/30 absolute top-1 right-1 text-[8px] md:text-[10px] font-bold">סוגיא {idx+1}</div>
                                       <div className="text-amber-900 font-black mb-1 md:mb-2">{isUnlocked ? String.fromCharCode(0x5D0 + (idx % 22)) : '🔒'}</div>
                                       <div className="text-amber-800/50 text-[8px] md:text-[10px] font-bold">{dafLabel}</div>
@@ -781,7 +805,7 @@ const equipSkin = (id: string) => {
 
       {gameState === 'SHOP' && (
           <div className="absolute inset-0 bg-slate-950/95 flex flex-col items-center p-4 md:p-8 z-20 overflow-y-auto scrollbar-hide h-full">
-              <div className="w-full max-w-5xl">
+              <div className="w-full max-w-5xl text-white">
                 <div className="flex flex-col md:flex-row justify-between items-center mb-6 md:mb-12 border-b border-slate-800 pb-4 md:pb-6 gap-4">
                   <h2 className="text-3xl md:text-6xl font-aramaic text-amber-500 drop-shadow-lg">חנות הציוד</h2>
                   <div className="text-xl md:text-4xl font-black text-white bg-slate-900 px-6 py-2 md:px-8 md:py-3 rounded-full border border-slate-700 shadow-inner flex items-center gap-3">
@@ -793,12 +817,11 @@ const equipSkin = (id: string) => {
                         const owned = item.type === 'skin' ? inventory.skins.includes(item.id) : false;
                         const equipped = inventory.currentSkin === item.id;
                         const locked = item.requiredAchievement && !unlockedAchievements.includes(item.requiredAchievement);
-                        
                         return (
                             <div key={item.id} onClick={() => owned && item.type === 'skin' ? equipSkin(item.id) : buyItem(item)}
                               className={`relative p-3 md:p-6 rounded-xl md:rounded-3xl border-2 flex flex-col items-center text-center cursor-pointer transition-all duration-300 group
                                   ${equipped ? 'border-amber-400 bg-amber-900/20 shadow-lg' : 'border-slate-800 bg-slate-900/50'}
-                                  ${locked ? 'opacity-60 grayscale cursor-not-allowed' : ''}
+                                  ${locked ? 'opacity-60 grayscale cursor-not-allowed' : 'hover:scale-105 hover:border-amber-500/30'}
                               `}>
                                 <div className="text-3xl md:text-7xl mb-2 md:mb-6 transform group-hover:scale-110 transition-transform">{item.icon}</div>
                                 <h3 className="font-black text-white text-[11px] md:text-2xl mb-1 md:mb-2">{item.name}</h3>
@@ -816,7 +839,7 @@ const equipSkin = (id: string) => {
       )}
 
       {gameState === 'LEADERBOARD' && (
-          <div className="absolute inset-0 bg-slate-950/98 flex flex-col items-center p-4 md:p-8 z-20 overflow-y-auto scrollbar-hide h-full">
+          <div className="absolute inset-0 bg-slate-950/98 flex flex-col items-center p-4 md:p-8 z-20 overflow-y-auto scrollbar-hide h-full text-white">
               <div className="w-full max-w-4xl">
                   <h2 className="text-3xl md:text-7xl font-aramaic text-amber-500 text-center mb-6 md:mb-12">טבלת האלופים</h2>
                   {loading ? (
@@ -853,7 +876,7 @@ const equipSkin = (id: string) => {
       )}
 
       {gameState === 'ACHIEVEMENTS' && (
-          <div className="absolute inset-0 bg-slate-950/95 flex flex-col items-center p-4 md:p-8 z-20 overflow-y-auto scrollbar-hide h-full">
+          <div className="absolute inset-0 bg-slate-950/95 flex flex-col items-center p-4 md:p-8 z-20 overflow-y-auto scrollbar-hide h-full text-white">
               <div className="w-full max-w-4xl">
                   <h2 className="text-3xl md:text-7xl font-aramaic text-purple-400 text-center mb-6 md:mb-12">הישגים תורניים</h2>
                   <div className="space-y-3 md:space-y-6 mb-8 md:mb-12">
@@ -877,7 +900,7 @@ const equipSkin = (id: string) => {
       )}
 
       {gameState === 'GAMEOVER' && (
-          <div className="absolute inset-0 bg-slate-950/98 flex flex-col items-center justify-start pt-10 md:justify-center p-4 md:p-8 z-30 overflow-y-auto scrollbar-hide h-full">
+          <div className="absolute inset-0 bg-slate-950/98 flex flex-col items-center justify-start pt-10 md:justify-center p-4 md:p-8 z-30 overflow-y-auto scrollbar-hide h-full text-white">
               <h2 className="text-4xl md:text-8xl text-red-600 font-black mb-3 md:mb-4 font-aramaic drop-shadow-[0_0_20px_rgba(220,38,38,0.3)]">המשחק נגמר</h2>
               <div className="text-xl md:text-4xl text-amber-500 font-black mb-6 md:mb-12 bg-slate-900 px-6 py-2 md:px-12 md:py-5 rounded-2xl md:rounded-3xl border-2 border-amber-600/30 shadow-2xl flex items-center gap-2 md:gap-4">
                 ניקוד: {stats.score.toLocaleString()} <GoldCoin size={24} />
@@ -893,20 +916,15 @@ const equipSkin = (id: string) => {
                         fetch(SCRIPT_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ name: playerName, class: playerClass, score: stats.score }) })
                           .then(() => { setLoading(false); alert('הציון נשמר!'); handleReturnToMenu(); })
                           .catch(() => { setLoading(false); alert('שגיאה בשמירה'); });
-                    }} disabled={loading} className="w-full bg-green-600 hover:bg-green-500 py-3 md:py-4 rounded-lg md:rounded-xl font-black text-white text-lg md:text-2xl shadow-xl transition-all disabled:opacity-50 hover:scale-[1.02] active:scale-95 border-b-4 border-green-900">
+                    }} disabled={loading} className="w-full bg-green-600 hover:bg-green-500 py-3 md:py-4 rounded-lg md:rounded-xl font-black text-white text-lg md:text-2xl shadow-xl transition-all disabled:opacity-50 hover:scale-[1.05] active:scale-95 border-b-4 border-green-900">
                         {loading ? 'שומר...' : 'שמור בטבלה'}
                     </button>
                   </div>
               </div>
               <div className="flex gap-2 md:gap-4 w-full max-w-md pb-12 md:pb-0">
-                  <button onClick={() => startGame(selectedSugia || undefined)} className="flex-1 bg-blue-600 px-3 py-3 md:px-8 md:py-5 rounded-xl md:rounded-2xl font-black text-sm md:text-xl transition-all shadow-lg hover:scale-105 hover:bg-blue-500 hover:shadow-blue-500/20 active:scale-95 border-b-4 border-blue-900">שוב</button>
-                  <button onClick={() => {
-                      if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
-                      engineRef.current = null;
-                      Sound.play('ui_click');
-                      setGameState('MAP');
-                  }} className="flex-1 bg-amber-700 px-3 py-3 md:px-8 md:py-5 rounded-xl md:rounded-2xl font-black text-sm md:text-xl transition-all shadow-lg hover:scale-105 hover:bg-amber-600 hover:shadow-amber-500/20 active:scale-95 border-b-4 border-amber-900">מפה</button>
-                  <button onClick={handleReturnToMenu} className="flex-1 bg-slate-800 px-3 py-3 md:px-8 md:py-5 rounded-xl md:rounded-2xl font-black text-sm md:text-xl transition-all shadow-lg hover:scale-105 hover:bg-slate-700 hover:shadow-slate-500/20 active:scale-95 border-b-4 border-slate-900">תפריט</button>
+                  <button onClick={() => startGame(selectedSugia || undefined)} className="flex-1 bg-blue-600 px-3 py-3 md:px-8 md:py-5 rounded-xl md:rounded-2xl font-black text-sm md:text-xl transition-all shadow-lg hover:scale-[1.05] hover:bg-blue-500 hover:shadow-blue-500/20 active:scale-95 border-b-4 border-blue-900 text-white">שוב</button>
+                  <button onClick={() => { if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current); engineRef.current = null; Sound.play('ui_click'); setGameState('MAP'); }} className="flex-1 bg-amber-700 px-3 py-3 md:px-8 md:py-5 rounded-xl md:rounded-2xl font-black text-sm md:text-xl transition-all shadow-lg hover:scale-[1.05] hover:bg-amber-600 hover:shadow-amber-500/20 active:scale-95 border-b-4 border-amber-900 text-white">מפה</button>
+                  <button onClick={handleReturnToMenu} className="flex-1 bg-slate-800 px-3 py-3 md:px-8 md:py-5 rounded-xl md:rounded-2xl font-black text-sm md:text-xl transition-all shadow-lg hover:scale-[1.05] hover:bg-slate-700 hover:shadow-slate-500/20 active:scale-95 border-b-4 border-slate-900 text-white">תפריט</button>
               </div>
           </div>
       )}
@@ -918,9 +936,7 @@ const AbilityButton = ({icon, count, color, onClick, label, shortcut}: {icon:str
     const bg = color === 'red' ? 'bg-red-600 active:bg-red-700' : color === 'blue' ? 'bg-blue-600 active:bg-blue-700' : 'bg-purple-600 active:bg-purple-700';
     return (
         <div className="flex flex-col items-center gap-1 group pointer-events-auto">
-          <button 
-              onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); Sound.play('ui_click'); if (count > 0) onClick(); }}
-              disabled={count <= 0}
+          <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); Sound.play('ui_click'); if (count > 0) onClick(); }} disabled={count <= 0}
               className={`w-12 h-12 md:w-20 md:h-20 rounded-2xl flex items-center justify-center text-xl md:text-4xl relative shadow-2xl border-b-4 active:border-b-0 active:translate-y-1 transition-all text-white
               ${count > 0 ? bg : 'bg-slate-800 grayscale opacity-40 cursor-not-allowed'}`}>
               {icon}
