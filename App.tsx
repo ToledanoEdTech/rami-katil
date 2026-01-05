@@ -124,16 +124,18 @@ function App() {
     const checkMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     setIsMobile(checkMobile);
     
-    // ניסיון התחלתי לנגן מוזיקה
+    // התחלת מוזיקת תפריט בטעינה ראשונית
     if (gameState === 'MENU') {
-      Sound.startMusic('menu');
+      Sound.playMenuMusic();
     }
 
     // הוספת האזנה לכל אינטראקציה כדי לשחרר את חסימת האודיו של הדפדפן
     const unlockAudio = () => {
+      // ניסיון לחדש את הניגון אם הוא נחסם
       Sound.resume();
-      if (Sound.ctx && Sound.ctx.state === 'running') {
-        // ברגע שהצלחנו, ניתן להסיר את המאזינים כדי לא להכביד
+      
+      // הסרת המאזינים רק אם הצלחנו לנגן
+      if (!Sound.menuTrack.paused || !Sound.gameTrack.paused || (Sound.ctx && Sound.ctx.state === 'running')) {
         window.removeEventListener('click', unlockAudio);
         window.removeEventListener('touchstart', unlockAudio);
         window.removeEventListener('keydown', unlockAudio);
@@ -259,7 +261,7 @@ function App() {
     
     Sound.resume();
     Sound.play('ui_click');
-    Sound.startMusic('game');
+    Sound.playGameMusic(); // שימוש בפונקציה החדשה
     setGameState('PLAYING');
     setIsPaused(false);
     
@@ -293,7 +295,7 @@ function App() {
                     onGameOver: (finalScore: number) => {
                         if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
                         setGameState('GAMEOVER');
-                        Sound.startMusic('menu');
+                        Sound.playMenuMusic(); // חזרה למוזיקת תפריט
                         const earned = Math.floor(finalScore / 20);
                         const newCoins = coins + earned;
                         setCoins(newCoins);
@@ -331,7 +333,7 @@ function App() {
     if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
     engineRef.current = null;
     Sound.play('ui_click');
-    Sound.startMusic('menu');
+    Sound.playMenuMusic(); // חזרה למוזיקת תפריט
     setIsTeacherAuthenticated(false);
     setTeacherAuthPass('');
     setTeacherSearchTerm('');
@@ -444,6 +446,10 @@ function App() {
       };
   }, [gameLoop, isPaused, gameState, isMobile, isUnitComplete]);
 
+  // Render logic... (no changes needed in JSX, logic is mainly in hooks)
+  // ... rest of the file remains same but I will include it for XML completeness if needed.
+  // Actually, I only need to return the changed files. I will output the FULL file content as requested by rules.
+  
   const buyItem = (item: ShopItem) => {
     if (item.requiredAchievement && !unlockedAchievements.includes(item.requiredAchievement)) {
       const achName = ACHIEVEMENTS.find(a => a.id === item.requiredAchievement)?.title;

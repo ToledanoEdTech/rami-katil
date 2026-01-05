@@ -3,54 +3,16 @@ export const Sound = {
   ctx: null as AudioContext | null,
   masterGain: null as GainNode | null,
   isMuted: false,
-  musicInterval: null as ReturnType<typeof setTimeout> | null,
-  noteIndex: 0,
-  currentMode: 'menu' as 'menu' | 'game',
   noiseBuffer: null as AudioBuffer | null,
   
-  // נגן HTML5 עבור הזרמת מוזיקה (עוקף בעיות CORS)
-  bgMusicElement: null as HTMLAudioElement | null,
-
-  MENU_MUSIC_URL: 'https://drive.google.com/uc?export=download&id=19nZady7yxEI7vvNvoaUOPj_5vxZPgUHy', 
-  GAME_MUSIC_URL: '', 
+  // הגדרת קבצי המוזיקה
+  menuTrack: new Audio('./menu.mp3'),
+  gameTrack: new Audio('./game.mp3'),
   
-  buffers: {} as Record<string, AudioBuffer>,
-  currentSource: null as AudioBufferSourceNode | null, // משמש רק לסינתיסייזר כרגע
-
-  melodies: {
-    menu: [
-      {f: 220.00, d: 0.4}, {f: 246.94, d: 0.4}, {f: 261.63, d: 0.4}, 
-      {f: 220.00, d: 0.4}, {f: 174.61, d: 0.4}, {f: 164.81, d: 0.8}, 
-      {f: 220.00, d: 0.4}, {f: 261.63, d: 0.4}, {f: 293.66, d: 0.4}, 
-      {f: 329.63, d: 1.2}, 
-      {f: 293.66, d: 0.4}, {f: 261.63, d: 0.4}, {f: 246.94, d: 0.4}, 
-      {f: 220.00, d: 0.8}, {f: 196.00, d: 0.4}, {f: 220.00, d: 1.2}  
-    ],
-    game: [
-      {f: 110.00, d: 0.2}, {f: 110.00, d: 0.2}, {f: 164.81, d: 0.2}, {f: 110.00, d: 0.2},
-      {f: 196.00, d: 0.2}, {f: 174.61, d: 0.2}, {f: 164.81, d: 0.2}, {f: 130.81, d: 0.2},
-      {f: 110.00, d: 0.2}, {f: 110.00, d: 0.2}, {f: 220.00, d: 0.2}, {f: 110.00, d: 0.2},
-      {f: 196.00, d: 0.2}, {f: 220.00, d: 0.2}, {f: 261.63, d: 0.2}, {f: 246.94, d: 0.2} 
-    ]
-  },
-
-  fixUrl: function(url: string): string {
-    if (!url) return '';
-    if (url.includes('dropbox.com')) {
-      return url.replace('www.dropbox.com', 'dl.dropboxusercontent.com').replace('?dl=0', '');
-    }
-    // המרה לקישור הורדה ישיר של גוגל
-    if (url.includes('drive.google.com') && !url.includes('export=download')) {
-      const idMatch = url.match(/\/d\/(.*?)\/|id=(.*?)(&|$)/);
-      const id = idMatch ? (idMatch[1] || idMatch[2]) : null;
-      if (id) {
-        return `https://docs.google.com/uc?export=download&id=${id}`;
-      }
-    }
-    return url;
-  },
+  currentMode: 'menu' as 'menu' | 'game',
 
   init: function() {
+    // אתחול הקונטקסט לאפקטים (יריות, פיצוצים)
     try {
       if (!this.ctx) {
         this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -60,19 +22,89 @@ export const Sound = {
         this.createNoiseBuffer();
       }
     } catch (e) {
-      console.warn("Sound init failed:", e);
+      console.warn("AudioContext init failed:", e);
+    }
+
+    // הגדרות מוזיקה
+    this.menuTrack.loop = true;
+    this.menuTrack.volume = 0.5; // עוצמת שמע תפריט
+
+    this.gameTrack.loop = true;
+    this.gameTrack.volume = 0.35; // עוצמת שמע משחק (קצת נמוך יותר כדי לא להפריע לאפקטים)
+  },
+
+  // פונקציה לניגון מוזיקת תפריט
+  playMenuMusic: function() {
+    this.currentMode = 'menu';
+    if (this.isMuted) return;
+
+    // עצירת מוזיקת משחק אם היא מנגנת
+    this.gameTrack.pause();
+    this.gameTrack.currentTime = 0;
+
+    // ניסיון לנגן תפריט
+    const playPromise = this.menuTrack.play();
+    if (playPromise !== undefined) {
+      playPromise.catch(error => {
+        console.log("Autoplay prevented for menu music. Waiting for interaction.");
+      });
     }
   },
 
+  // פונקציה לניגון מוזיקת משחק
+  playGameMusic: function() {
+    this.currentMode = 'game';
+    if (this.isMuted) return;
+
+    // עצירת מוזיקת תפריט אם היא מנגנת
+    this.menuTrack.pause();
+    this.menuTrack.currentTime = 0;
+
+    // ניסיון לנגן משחק
+    const playPromise = this.gameTrack.play();
+    if (playPromise !== undefined) {
+      playPromise.catch(error => {
+        console.log("Autoplay prevented for game music.");
+      });
+    }
+  },
+
+  // פונקציה כללית לעצירת כל המוזיקה
+  stopMusic: function() {
+    this.menuTrack.pause();
+    this.menuTrack.currentTime = 0;
+    this.gameTrack.pause();
+    this.gameTrack.currentTime = 0;
+  },
+
+  // פונקציה שנקראת בלחיצה הראשונה של המשתמש
   resume: function() {
     if (this.ctx && this.ctx.state === 'suspended') {
       this.ctx.resume().catch(e => console.error("Audio resume failed", e));
     }
-    // ניסיון לנגן אם האלמנט קיים אך מושהה
-    if (this.bgMusicElement && this.bgMusicElement.paused && !this.isMuted) {
-        this.bgMusicElement.play().catch(e => console.log("Waiting for interaction to play music"));
+
+    // אם אנחנו לא מושתקים, נסה לנגן את הטרק המתאים למצב הנוכחי
+    if (!this.isMuted) {
+      if (this.currentMode === 'menu' && this.menuTrack.paused) {
+        this.menuTrack.play();
+      } else if (this.currentMode === 'game' && this.gameTrack.paused) {
+        this.gameTrack.play();
+      }
     }
   },
+
+  toggleMute: function() {
+    this.isMuted = !this.isMuted;
+    if (this.isMuted) {
+      this.stopMusic();
+    } else {
+      if (this.currentMode === 'menu') this.playMenuMusic();
+      else this.playGameMusic();
+    }
+    return this.isMuted;
+  },
+
+  // --- מכאן והלאה: לוגיקה של אפקטים קוליים (SFX) באמצעות סינתיסייזר ---
 
   createNoiseBuffer: function() {
     if (!this.ctx) return;
@@ -85,20 +117,9 @@ export const Sound = {
     this.noiseBuffer = buffer;
   },
 
-  toggleMute: function() {
-    this.isMuted = !this.isMuted;
-    if (this.isMuted) {
-      this.stopMusic();
-    } else {
-      this.startMusic(this.currentMode);
-    }
-    return this.isMuted;
-  },
-
   playTone: function(freq: number, type: OscillatorType, duration: number, volume: number, decayType: 'exp' | 'lin' = 'exp') {
     if (!this.ctx || this.isMuted || !this.masterGain) return;
-    this.resume();
-
+    
     const now = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
     const g = this.ctx.createGain();
@@ -118,12 +139,28 @@ export const Sound = {
     return osc;
   },
 
+  playNoise: function(filterFreq: number, duration: number, volume: number) {
+    if (!this.ctx || !this.noiseBuffer || !this.masterGain) return;
+    const now = this.ctx.currentTime;
+    const source = this.ctx.createBufferSource();
+    const filter = this.ctx.createBiquadFilter();
+    const g = this.ctx.createGain();
+    source.buffer = this.noiseBuffer;
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(filterFreq, now);
+    g.gain.setValueAtTime(volume, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + duration);
+    source.connect(filter);
+    filter.connect(g);
+    g.connect(this.masterGain);
+    source.start(now);
+  },
+
   play: function(type: 'shoot' | 'hit' | 'coin' | 'bomb' | 'explosion' | 'powerup' | 'ui_click' | 'boss_hit') {
     if (!this.ctx || this.isMuted || !this.masterGain) return;
-    this.resume(); 
+    this.resume(); // מוודא שהקונטקסט ער
     const now = this.ctx.currentTime;
-    
-    // קוד האפקטים נשאר זהה
+
     if (type === 'shoot') {
       const osc = this.playTone(800, 'square', 0.15, 0.08);
       if (osc) osc.frequency.exponentialRampToValueAtTime(100, now + 0.15);
@@ -160,113 +197,6 @@ export const Sound = {
     } else if (type === 'boss_hit') {
       const osc = this.playTone(300, 'sawtooth', 0.1, 0.15);
       if (osc) osc.frequency.linearRampToValueAtTime(50, now + 0.1);
-    }
-  },
-
-  playNoise: function(filterFreq: number, duration: number, volume: number) {
-    if (!this.ctx || !this.noiseBuffer || !this.masterGain) return;
-    const now = this.ctx.currentTime;
-    const source = this.ctx.createBufferSource();
-    const filter = this.ctx.createBiquadFilter();
-    const g = this.ctx.createGain();
-    source.buffer = this.noiseBuffer;
-    filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(filterFreq, now);
-    g.gain.setValueAtTime(volume, now);
-    g.gain.exponentialRampToValueAtTime(0.001, now + duration);
-    source.connect(filter);
-    filter.connect(g);
-    g.connect(this.masterGain);
-    source.start(now);
-  },
-
-  stopMusic: function() {
-    // עצירת נגן ה-HTML5
-    if (this.bgMusicElement) {
-        this.bgMusicElement.pause();
-        this.bgMusicElement.currentTime = 0;
-        this.bgMusicElement = null;
-    }
-
-    // עצירת הסינתיסייזר
-    if (this.currentSource) {
-      try { this.currentSource.stop(); } catch(e){}
-      this.currentSource = null;
-    }
-    if (this.musicInterval) {
-      clearTimeout(this.musicInterval);
-      this.musicInterval = null;
-    }
-  },
-
-  startMusic: function(mode: 'menu' | 'game' = 'menu') {
-    this.init();
-    if (this.isMuted) return;
-    
-    // מניעת הפעלה מחדש אם כבר מנגן את המצב הזה
-    if (this.currentMode === mode && (this.bgMusicElement || this.musicInterval)) return;
-
-    this.stopMusic();
-    this.currentMode = mode;
-    this.noteIndex = 0;
-
-    const url = mode === 'menu' ? this.MENU_MUSIC_URL : this.GAME_MUSIC_URL;
-    const fixedUrl = this.fixUrl(url);
-
-    // ניסיון לנגן באמצעות HTML5 Audio (עוקף CORS)
-    if (fixedUrl) {
-        const audio = new Audio(fixedUrl);
-        audio.loop = true;
-        audio.volume = 0.4;
-        audio.crossOrigin = "anonymous"; // ניסיון, אבל HTML5 פחות קפדן מ-Web Audio
-        
-        const playPromise = audio.play();
-        if (playPromise !== undefined) {
-            playPromise.then(() => {
-                console.log("Playing external music via HTML5 Audio");
-                this.bgMusicElement = audio;
-            }).catch(error => {
-                console.warn("HTML5 Audio autoplay blocked or failed, falling back to Synth:", error);
-                // במקרה של כישלון (למשל חסימת דפדפן או קישור שבור), עוברים לסינתיסייזר
-                this.bgMusicElement = null;
-                this.playMusicLoop();
-            });
-        }
-    } else {
-        // אין קישור, נגן סינתיסייזר
-        this.playMusicLoop();
-    }
-  },
-
-  playMusicLoop: function() {
-    // פונקציית הגיבוי של הסינתיסייזר
-    if (this.isMuted || !this.ctx || !this.masterGain || this.bgMusicElement) return;
-    if (this.musicInterval) clearTimeout(this.musicInterval);
-
-    try {
-      const mode = this.currentMode;
-      const melody = this.melodies[mode] || this.melodies['menu'];
-      const note = melody[this.noteIndex % melody.length];
-      
-      const oscType: OscillatorType = mode === 'menu' ? 'triangle' : 'square';
-      const volume = mode === 'menu' ? 0.15 : 0.08;
-      const decay = mode === 'menu' ? 'lin' : 'exp';
-
-      this.playTone(note.f, oscType, note.d * 0.9, volume, decay);
-      
-      if (mode === 'menu') {
-         this.playTone(note.f / 2, 'sine', note.d * 1.5, 0.1, 'lin');
-      }
-      
-      if (mode === 'game' && this.noteIndex % 2 === 0) {
-         this.playTone(55, 'sawtooth', 0.1, 0.15, 'exp');
-      }
-
-      this.noteIndex++;
-      this.musicInterval = setTimeout(() => this.playMusicLoop(), note.d * 1000);
-      
-    } catch (e) {
-      console.warn("Synth loop error", e);
     }
   }
 };
