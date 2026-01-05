@@ -123,9 +123,32 @@ function App() {
     Sound.init();
     const checkMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     setIsMobile(checkMobile);
+    
+    // ניסיון התחלתי לנגן מוזיקה
     if (gameState === 'MENU') {
       Sound.startMusic('menu');
     }
+
+    // הוספת האזנה לכל אינטראקציה כדי לשחרר את חסימת האודיו של הדפדפן
+    const unlockAudio = () => {
+      Sound.resume();
+      if (Sound.ctx && Sound.ctx.state === 'running') {
+        // ברגע שהצלחנו, ניתן להסיר את המאזינים כדי לא להכביד
+        window.removeEventListener('click', unlockAudio);
+        window.removeEventListener('touchstart', unlockAudio);
+        window.removeEventListener('keydown', unlockAudio);
+      }
+    };
+    
+    window.addEventListener('click', unlockAudio);
+    window.addEventListener('touchstart', unlockAudio);
+    window.addEventListener('keydown', unlockAudio);
+
+    return () => {
+      window.removeEventListener('click', unlockAudio);
+      window.removeEventListener('touchstart', unlockAudio);
+      window.removeEventListener('keydown', unlockAudio);
+    };
   }, [fetchData]);
 
   // Handle URL Parameter after data is fetched
@@ -657,6 +680,7 @@ const equipSkin = (id: string) => {
           </div>
       )}
 
+      {/* שאר הקוד נשאר זהה... */}
       {gameState === 'TEACHER' && !isTeacherAuthenticated && (
           <div className="absolute inset-0 bg-slate-950 flex flex-col items-center justify-center p-6 z-[100] h-full">
               <div className="bg-slate-900 p-8 rounded-3xl border border-slate-700 shadow-2xl max-w-sm w-full text-center">
