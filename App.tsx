@@ -103,6 +103,7 @@ function App() {
       const response = await fetch(SCRIPT_URL);
       if (!response.ok) throw new Error('Network response was not ok');
       const data = await response.json();
+      // The new script returns clean data, so we can use it directly
       if (data.leaderboard) setLeaderboard(data.leaderboard);
       if (data.dynamicWords) {
           setDynamicWords(data.dynamicWords);
@@ -856,28 +857,41 @@ const equipSkin = (id: string) => {
                       <div className="text-lg md:text-3xl text-center text-slate-400 animate-pulse">טוען נתונים...</div>
                   ) : (
                       <div className="bg-slate-900/50 rounded-xl md:rounded-3xl border border-slate-800 overflow-hidden mb-6 md:mb-12">
-                          <table className="w-full text-right border-collapse text-xs md:text-base">
-                              <thead className="bg-slate-800 text-slate-400 uppercase tracking-widest font-black">
-                                  <tr>
-                                      <th className="p-3 md:p-6">מיקום</th>
-                                      <th className="p-3 md:p-6">שם</th>
-                                      <th className="p-3 md:p-6">כיתה</th>
-                                      <th className="p-3 md:p-6">ניקוד</th>
-                                  </tr>
-                              </thead>
-                              <tbody>
-                                  {leaderboard.map((entry, idx) => (
-                                      <tr key={idx} className={`border-b border-slate-800 ${idx === 0 ? 'bg-amber-900/10' : ''}`}>
-                                          <td className="p-3 md:p-6 text-sm md:text-2xl font-black text-slate-500">{idx + 1}</td>
-                                          <td className="p-3 md:p-6 text-xs md:text-xl font-bold text-white truncate max-w-[80px] md:max-w-none">{entry.name}</td>
-                                          <td className="p-3 md:p-6 text-[10px] md:text-lg text-slate-400 truncate max-w-[60px] md:max-w-none">{entry.class}</td>
-                                          <td className="p-3 md:p-6 text-xs md:text-2xl font-black text-amber-400 flex items-center gap-1">
-                                            {entry.score.toLocaleString()} <GoldCoin size={14} />
-                                          </td>
+                          {leaderboard.length === 0 ? (
+                            <div className="text-center p-10 text-slate-500 text-xl font-bold">
+                                אין עדיין תוצאות בטבלה. היה הראשון לכבוש את הפסגה!
+                            </div>
+                          ) : (
+                              <table className="w-full text-right border-collapse text-xs md:text-base">
+                                  <thead className="bg-slate-800 text-slate-400 uppercase tracking-widest font-black">
+                                      <tr>
+                                          <th className="p-3 md:p-6">מיקום</th>
+                                          <th className="p-3 md:p-6">שם התלמיד</th>
+                                          <th className="p-3 md:p-6">כיתה</th>
+                                          <th className="p-3 md:p-6">ניקוד</th>
                                       </tr>
-                                  ))}
-                              </tbody>
-                          </table>
+                                  </thead>
+                                  <tbody>
+                                      {leaderboard.map((entry, idx) => {
+                                          let rank: React.ReactNode = idx + 1;
+                                          if (idx === 0) rank = "🥇";
+                                          else if (idx === 1) rank = "🥈";
+                                          else if (idx === 2) rank = "🥉";
+
+                                          return (
+                                              <tr key={idx} className={`border-b border-slate-800 ${idx < 3 ? 'bg-amber-900/10' : ''}`}>
+                                                  <td className="p-3 md:p-6 text-sm md:text-3xl font-black text-slate-500 text-center">{rank}</td>
+                                                  <td className="p-3 md:p-6 text-xs md:text-xl font-bold text-white truncate max-w-[150px]">{entry.name}</td>
+                                                  <td className="p-3 md:p-6 text-[10px] md:text-lg text-slate-400 truncate max-w-[100px]">{entry.class}</td>
+                                                  <td className="p-3 md:p-6 text-xs md:text-2xl font-black text-amber-400 flex items-center gap-1">
+                                                    {entry.score.toLocaleString()} <GoldCoin size={14} />
+                                                  </td>
+                                              </tr>
+                                          );
+                                      })}
+                                  </tbody>
+                              </table>
+                          )}
                       </div>
                   )}
                   <button onClick={handleReturnToMenu} className="bg-slate-700 px-10 md:px-16 py-3 md:py-4 rounded-xl md:rounded-2xl text-lg md:text-2xl font-black mx-auto block mb-12">חזור</button>
