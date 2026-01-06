@@ -312,6 +312,19 @@ function App() {
                         const newCoins = coins + earned;
                         setCoins(newCoins);
                         localStorage.setItem('coins', newCoins.toString());
+
+                        // Remove Stealth skin if used
+                        if (inventory.currentSkin === 'skin_stealth') {
+                            const newSkins = inventory.skins.filter(s => s !== 'skin_stealth');
+                            setInventory(prev => ({
+                                ...prev,
+                                skins: newSkins,
+                                currentSkin: 'skin_default'
+                            }));
+                            localStorage.setItem('skins', JSON.stringify(newSkins));
+                            localStorage.setItem('currentSkin', 'skin_default');
+                            setConfig(prev => ({...prev, skin: 'skin_default'}));
+                        }
                     },
                     onFeedback: (msg: string, isGood: boolean) => {
                         setFeedback({msg, isGood});
