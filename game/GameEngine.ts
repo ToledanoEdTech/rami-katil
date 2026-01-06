@@ -203,7 +203,8 @@ export class GameEngine {
     if (this.config.modifier === 'density' || this.config.modifier === 'final') count += 1;
 
     let speed = (this.config.difficulty === 'easy' ? 1.4 : this.config.difficulty === 'medium' ? 2.0 : 3.0) + (this.level * 0.08);
-    if (isMobile) speed *= 0.85; 
+    // האטה משמעותית למובייל כפי שביקשת
+    if (isMobile) speed *= 0.60; 
 
     let answers = [{ text: wordObj.hebrew, correct: true }];
     let distractors = this.activeDictionary.filter(w => w.hebrew !== wordObj.hebrew);

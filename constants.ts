@@ -1,7 +1,7 @@
 
 import { Word, ShopItem, Achievement, Sugia } from './types';
 
-export const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzlI-UoqopQSFOb3DIrpebYMZpjKXyki1htPzHknk6Fp7SBQFAbmbVeEn1q_I7_AjIu/exec';
+export const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyVRPErIu7-rm-3goBKB_KMy_0GPONmfQhVrPu9gdZI5dVjO7tdiX2dALkHaDZk3M2r/exec';
 
 export const ACHIEVEMENTS: Achievement[] = [
   { id: 'zurba', title: 'צורבא מרבנן', desc: 'צבירת רצף (Combo) של 10 פגיעות רצופות', icon: '🎓' },

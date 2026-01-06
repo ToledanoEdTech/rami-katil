@@ -100,18 +100,30 @@ function App() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch(SCRIPT_URL);
+      // הוספת פרמטר זמן למניעת שמירת נתונים ישנים במטמון הדפדפן
+      const response = await fetch(`${SCRIPT_URL}?t=${new Date().getTime()}`);
       if (!response.ok) throw new Error('Network response was not ok');
       const data = await response.json();
-      // The new script returns clean data, so we can use it directly
-      if (data.leaderboard) setLeaderboard(data.leaderboard);
-      if (data.dynamicWords) {
+      
+      // טיפול גמיש במבנה הנתונים שהתקבל
+      let leaderboardData: LeaderboardEntry[] = [];
+      
+      if (data.leaderboard && Array.isArray(data.leaderboard)) {
+        leaderboardData = data.leaderboard;
+      } else if (Array.isArray(data)) {
+        // במקרה שהסקריפט מחזיר מערך ישיר
+        leaderboardData = data as LeaderboardEntry[];
+      }
+      
+      setLeaderboard(leaderboardData);
+      
+      if (data.dynamicWords && Array.isArray(data.dynamicWords)) {
           setDynamicWords(data.dynamicWords);
       }
       setHasFetched(true);
     } catch (error) {
       console.error('Error fetching data:', error);
-      setHasFetched(true); // Ensure we proceed even on error
+      setHasFetched(true); 
     } finally {
       setLoading(false);
     }
@@ -447,8 +459,6 @@ function App() {
   }, [gameLoop, isPaused, gameState, isMobile, isUnitComplete]);
 
   // Render logic... (no changes needed in JSX, logic is mainly in hooks)
-  // ... rest of the file remains same but I will include it for XML completeness if needed.
-  // Actually, I only need to return the changed files. I will output the FULL file content as requested by rules.
   
   const buyItem = (item: ShopItem) => {
     if (item.requiredAchievement && !unlockedAchievements.includes(item.requiredAchievement)) {
@@ -678,10 +688,87 @@ const equipSkin = (id: string) => {
                           <button onClick={() => navigateTo('ACHIEVEMENTS')} className="bg-purple-800/80 p-2 md:p-5 rounded-xl border border-purple-700 text-xs md:text-xl font-bold transition-all shadow-lg hover:scale-105 hover:border-purple-400/50 hover:shadow-purple-400/20 active:scale-95 active:translate-y-1">📜 הישגים</button>
                           <button onClick={() => navigateTo('TEACHER')} className="bg-blue-800/80 p-2 md:p-5 rounded-xl border border-blue-700 text-xs md:text-xl font-bold transition-all shadow-lg flex items-center justify-center gap-2 hover:scale-105 hover:border-blue-400/50 hover:shadow-blue-400/20 active:scale-95 active:translate-y-1">🎓 מצב מורה</button>
                       </div>
-                      <div className="hidden md:block">
-                        <ControlsDisplay />
-                      </div>
+                      <button onClick={() => navigateTo('INSTRUCTIONS')} className="bg-slate-800 p-2 md:p-4 rounded-xl border border-slate-700 text-xs md:text-lg font-bold transition-all shadow-lg hover:scale-105 hover:border-slate-500 active:scale-95 text-slate-300 w-full">📖 מדריך ועזרה</button>
                   </div>
+              </div>
+          </div>
+      )}
+
+      {/* Instructions Screen */}
+      {gameState === 'INSTRUCTIONS' && (
+          <div className="absolute inset-0 bg-slate-950 flex flex-col items-center p-4 md:p-8 z-20 overflow-y-auto scrollbar-hide h-full text-white">
+              <div className="w-full max-w-4xl pb-10">
+                  <div className="flex justify-between items-center mb-6 border-b border-slate-800 pb-4">
+                      <button onClick={handleReturnToMenu} className="bg-slate-800 px-4 py-2 md:px-8 md:py-3 rounded-xl font-bold text-xs md:text-lg shadow-lg">חזור</button>
+                      <h2 className="text-2xl md:text-5xl font-aramaic text-amber-500 font-black">מדריך למשחק</h2>
+                  </div>
+
+                  <div className="space-y-6 md:space-y-8">
+                      {/* Section 1: How to Play */}
+                      <section className="bg-slate-900/50 p-6 rounded-3xl border border-slate-800">
+                          <h3 className="text-xl md:text-3xl font-aramaic text-blue-400 mb-4 font-bold border-b border-blue-900/30 pb-2">🎯 איך משחקים?</h3>
+                          <p className="text-sm md:text-lg text-slate-300 leading-relaxed">
+                              במרכז המסך מופיעה מילה בארמית (למשל: "רַחֲמָנָא"). <br/>
+                              חלליות אויב יורדות מלמעלה ונושאות תרגומים אפשריים בעברית. <br/>
+                              המטרה שלך היא לירות רק על החללית עם התרגום הנכון! פגיעה נכונה מזכה בניקוד, פגיעה שגויה מורידה חיים.
+                          </p>
+                      </section>
+
+                      {/* Section 2: Controls */}
+                      <section className="bg-slate-900/50 p-6 rounded-3xl border border-slate-800">
+                          <h3 className="text-xl md:text-3xl font-aramaic text-green-400 mb-4 font-bold border-b border-green-900/30 pb-2">🎮 מקשים ושליטה</h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                              <div className="bg-slate-800/50 p-4 rounded-xl">
+                                  <h4 className="font-bold text-white mb-2 flex items-center gap-2"><span className="text-xl">💻</span> מחשב</h4>
+                                  <ul className="text-sm md:text-base text-slate-300 space-y-2">
+                                      <li><span className="text-amber-400 font-bold">עכבר:</span> הזזת המטוס</li>
+                                      <li><span className="text-amber-400 font-bold">קליק / רווח:</span> ירי</li>
+                                      <li><span className="text-amber-400 font-bold">A:</span> שימוש בפצצה</li>
+                                      <li><span className="text-amber-400 font-bold">S:</span> הפעלת מגן</li>
+                                      <li><span className="text-amber-400 font-bold">D:</span> שיקוי זמן</li>
+                                      <li><span className="text-amber-400 font-bold">Esc:</span> עצירה</li>
+                                  </ul>
+                              </div>
+                              <div className="bg-slate-800/50 p-4 rounded-xl">
+                                  <h4 className="font-bold text-white mb-2 flex items-center gap-2"><span className="text-xl">📱</span> טלפון / טאבלט</h4>
+                                  <ul className="text-sm md:text-base text-slate-300 space-y-2">
+                                      <li><span className="text-amber-400 font-bold">גרירה:</span> הזזת המטוס</li>
+                                      <li><span className="text-amber-400 font-bold">כפתור 🔥:</span> ירי (בצד שמאל)</li>
+                                      <li><span className="text-amber-400 font-bold">כפתורים למטה:</span> שימוש בכוחות מיוחדים</li>
+                                  </ul>
+                              </div>
+                          </div>
+                      </section>
+
+                      {/* Section 3: Scoring */}
+                      <section className="bg-slate-900/50 p-6 rounded-3xl border border-slate-800">
+                          <h3 className="text-xl md:text-3xl font-aramaic text-amber-400 mb-4 font-bold border-b border-amber-900/30 pb-2">🏆 שיטת הניקוד</h3>
+                          <div className="text-sm md:text-lg text-slate-300 space-y-3">
+                              <p>הניקוד בסיס לכל פגיעה תלוי ברמת הקושי:</p>
+                              <div className="flex gap-4 mb-2">
+                                  <span className="bg-slate-800 px-3 py-1 rounded text-green-400">קל: 100</span>
+                                  <span className="bg-slate-800 px-3 py-1 rounded text-orange-400">בינוני: 200</span>
+                                  <span className="bg-slate-800 px-3 py-1 rounded text-red-500">קשה: 400</span>
+                              </div>
+                              <p><span className="text-amber-400 font-bold">בונוס רצף (Combo):</span> כל פגיעה רצופה מכפילה את הניקוד! רצף של 10 פגיעות ומעלה מזכה בתואר "צורבא מרבנן".</p>
+                              <p><span className="text-amber-400 font-bold">בוס:</span> ניצחון על הבוס מעניק 10,000 נקודות. ניצחון ללא פגיעה מעניק הישג מיוחד.</p>
+                          </div>
+                      </section>
+
+                      {/* Section 4: Stages */}
+                      <section className="bg-slate-900/50 p-6 rounded-3xl border border-slate-800">
+                          <h3 className="text-xl md:text-3xl font-aramaic text-purple-400 mb-4 font-bold border-b border-purple-900/30 pb-2">🌍 סוגי השלבים (סוגיות)</h3>
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs md:text-sm text-slate-300">
+                              <div className="bg-slate-800 p-2 rounded">🌊 <span className="font-bold">נהרדעא:</span> אויבים נעים בגל</div>
+                              <div className="bg-slate-800 p-2 rounded">🔥 <span className="font-bold">סורא:</span> אותיות אש נופלות</div>
+                              <div className="bg-slate-800 p-2 rounded">📜 <span className="font-bold">פומבדיתא:</span> מילים קטנות ומהירות</div>
+                              <div className="bg-slate-800 p-2 rounded">💨 <span className="font-bold">בירא דלוות:</span> רוח סוחפת את המטוס</div>
+                              <div className="bg-slate-800 p-2 rounded">👁️ <span className="font-bold">מחוזא:</span> אויבים נעלמים ומופיעים</div>
+                              <div className="bg-slate-800 p-2 rounded">🌑 <span className="font-bold">מתא מחסיא:</span> חושך, רואים רק קרוב</div>
+                          </div>
+                      </section>
+                  </div>
+                  <button onClick={handleReturnToMenu} className="bg-slate-700 px-10 md:px-16 py-3 md:py-4 rounded-xl md:rounded-2xl text-lg md:text-2xl font-black mx-auto block mt-10 shadow-xl border-b-4 border-slate-900 active:border-b-0 active:translate-y-1 transition-all">הבנתי, בוא נתחיל!</button>
               </div>
           </div>
       )}
@@ -702,16 +789,16 @@ const equipSkin = (id: string) => {
       )}
 
       {gameState === 'TEACHER' && isTeacherAuthenticated && (
-          <div className="absolute inset-0 bg-slate-950 flex flex-col z-[100] p-4 md:p-8 overflow-hidden h-full">
+          <div className="absolute inset-0 bg-slate-950 flex flex-col z-[100] p-4 md:p-8 overflow-y-auto md:overflow-hidden h-full">
               <div className="max-w-4xl w-full mx-auto flex flex-col h-full text-white">
                   <div className="flex justify-between items-center mb-6 border-b border-slate-800 pb-4">
                       <button onClick={handleReturnToMenu} className="bg-slate-800 px-4 py-2 md:px-8 md:py-3 rounded-xl font-bold text-xs md:text-lg">חזור</button>
                       <h2 className="text-2xl md:text-6xl font-aramaic text-blue-400 font-black">ממשק מורה</h2>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full overflow-hidden">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-auto md:h-full overflow-visible md:overflow-hidden pb-10 md:pb-0">
                     {/* Left Side: Word Selector */}
-                    <div className="flex flex-col h-full overflow-hidden bg-slate-900/40 p-4 rounded-3xl border border-slate-800">
+                    <div className="flex flex-col h-[55vh] md:h-full overflow-hidden bg-slate-900/40 p-4 rounded-3xl border border-slate-800">
                         <h3 className="text-white font-bold mb-4 text-center">בניית שיעור מתוך המילון</h3>
                         
                         <div className="space-y-3 mb-4">
@@ -760,7 +847,7 @@ const equipSkin = (id: string) => {
                     </div>
 
                     {/* Right Side: Add New Word */}
-                    <div className="bg-slate-900/80 p-6 rounded-3xl border border-blue-500/30 flex flex-col">
+                    <div className="bg-slate-900/80 p-6 rounded-3xl border border-blue-500/30 flex flex-col h-auto md:h-auto">
                         <h3 className="text-blue-400 font-black text-xl mb-6 text-center">הוספת מילה קבועה למילון</h3>
                         <div className="space-y-4 flex-1">
                             <div>
