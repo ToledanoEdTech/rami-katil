@@ -27,12 +27,12 @@ export const SUGIOT: Sugia[] = [
 export const SHOP_ITEMS: ShopItem[] = [
   { id: 'skin_default', name: 'מטוס רגיל', type: 'skin', price: 0, desc: 'מטוס קרב סטנדרטי שיורה כדורי אנרגיה', icon: '✈️' },
   { id: 'skin_gold', name: 'אור החמה', type: 'skin', price: 800, desc: 'מטוס יוקרתי שיורה קרן אור שמש עוצמתית (דרוש צורבא מרבנן)', icon: '☀️', requiredAchievement: 'zurba' },
-  { id: 'skin_stealth', name: 'חמקן', type: 'skin', price: 12000, desc: 'מטוס שחור שיורה טילים מתבייתים (למשחק אחד בלבד)', icon: '🦅' },
+  { id: 'skin_butzina', name: 'בוצינא קדישא', type: 'skin', price: 1000, desc: 'מטוס מואר בצבע סגול שיורה קווי לייזר', icon: '🕯️' },
   { id: 'skin_torah', name: 'אש התורה', type: 'skin', price: 1500, desc: 'ספר תורה הפולט כדורי אש קדושה (דרוש סיני ועוקר הרים)', icon: '🕎', requiredAchievement: 'sinai' },
   { id: 'skin_choshen', name: 'חושן המשפט', type: 'skin', price: 2000, desc: 'מבנה עוצמתי שיורה קשתות חשמל', icon: '💎' },
   { id: 'upgrade_bomb', name: '+1 פצצת תיקו', type: 'consumable', price: 250, desc: 'מנקה את כל המסך מאויבים', icon: '💣' },
-  { id: 'item_shield', name: '+1 מגן דוד', type: 'consumable', price: 300, desc: 'מגן מפני פגיעה אחת (לחץ S)', icon: '🛡️' },
-  { id: 'item_freeze', name: '+1 שיקוי הזמן', type: 'consumable', price: 400, desc: 'מאט את כל האויבים לזמן ממושך (לחץ T)', icon: '⏳' }
+  { id: 'item_shield', name: '+1 מגן דוד', type: 'consumable', price: 300, desc: 'מגן מפני פגיעה אחת (עד 3)', icon: '🛡️' },
+  { id: 'item_freeze', name: '+1 שיקוי הזמן', type: 'consumable', price: 400, desc: 'מאט את כל האויבים לזמן ממושך (עד 3)', icon: '⏳' }
 ];
 
 export const DICTIONARY: Word[] = [

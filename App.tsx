@@ -312,19 +312,6 @@ function App() {
                         const newCoins = coins + earned;
                         setCoins(newCoins);
                         localStorage.setItem('coins', newCoins.toString());
-
-                        // Remove Stealth skin if used
-                        if (inventory.currentSkin === 'skin_stealth') {
-                            const newSkins = inventory.skins.filter(s => s !== 'skin_stealth');
-                            setInventory(prev => ({
-                                ...prev,
-                                skins: newSkins,
-                                currentSkin: 'skin_default'
-                            }));
-                            localStorage.setItem('skins', JSON.stringify(newSkins));
-                            localStorage.setItem('currentSkin', 'skin_default');
-                            setConfig(prev => ({...prev, skin: 'skin_default'}));
-                        }
                     },
                     onFeedback: (msg: string, isGood: boolean) => {
                         setFeedback({msg, isGood});
@@ -479,6 +466,18 @@ function App() {
       alert(`פריט זה נעול! עליך להשיג את ההישג "${achName}" כדי לקנות אותו.`);
       return;
     }
+
+    if (item.type === 'consumable') {
+        if (item.id === 'item_shield' && inventory.shields >= 3) {
+            alert('ניתן להחזיק עד 3 מגנים בלבד');
+            return;
+        }
+        if (item.id === 'item_freeze' && inventory.potions >= 3) {
+            alert('ניתן להחזיק עד 3 שיקויים בלבד');
+            return;
+        }
+    }
+
     if (coins >= item.price) {
         const newCoins = coins - item.price;
         setCoins(newCoins);

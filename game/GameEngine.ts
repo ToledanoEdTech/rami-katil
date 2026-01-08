@@ -136,7 +136,7 @@ export class GameEngine {
   applySkinWeapon() {
     if (this.config.skin === 'skin_torah') { this.weaponType = 'fire'; this.weaponAmmo = 9999; }
     else if (this.config.skin === 'skin_gold') { this.weaponType = 'beam'; this.weaponAmmo = 9999; }
-    else if (this.config.skin === 'skin_stealth') { this.weaponType = 'missile'; this.weaponAmmo = 9999; }
+    else if (this.config.skin === 'skin_butzina') { this.weaponType = 'laser'; this.weaponAmmo = 9999; }
     else if (this.config.skin === 'skin_choshen') { this.weaponType = 'electric'; this.weaponAmmo = 9999; }
     else { this.weaponType = 'normal'; this.weaponAmmo = 0; }
   }
@@ -292,7 +292,7 @@ export class GameEngine {
   updateProjectiles(dt: number) {
       this.projectilePool.forEach(p => {
           if (!p.active) return;
-          if (p.type === 'beam') { 
+          if (p.type === 'beam' || p.type === 'laser') { 
               p.life -= dt; 
               p.x = this.player.x; 
               if (p.life <= 0) p.active = false; 
@@ -304,12 +304,12 @@ export class GameEngine {
           if (this.boss && p.active && !p.hasHit) {
               const isMobile = this.width < 600;
               const hitRadius = isMobile ? 100 : 140;
-              let isHit = p.type === 'beam' ? (Math.abs(p.x - this.boss.x) < hitRadius && this.boss.y < p.y) : (Math.hypot(p.x - this.boss.x, p.y - this.boss.y) < (p.type === 'fire' ? hitRadius * 1.2 : hitRadius));
+              let isHit = (p.type === 'beam' || p.type === 'laser') ? (Math.abs(p.x - this.boss.x) < hitRadius && this.boss.y < p.y) : (Math.hypot(p.x - this.boss.x, p.y - this.boss.y) < (p.type === 'fire' ? hitRadius * 1.2 : hitRadius));
               if (isHit) { 
                   const bossY = this.boss.y; // שמירת המיקום לפני שהבוס עשוי להיעלם
                   this.damageBoss(p); 
                   p.hasHit = true;
-                  if (p.type === 'beam') {
+                  if (p.type === 'beam' || p.type === 'laser') {
                       p.targetY = bossY + 100;
                       p.life = Math.min(p.life, 5); // השארת הקרן גלויה לרגע
                   } else {
@@ -323,7 +323,7 @@ export class GameEngine {
 
   damageBoss(p: any) {
       if (!this.boss) return;
-      let dmg = p.type === 'missile' ? 10 : p.type === 'beam' ? 4.5 : p.type === 'fire' ? 12.0 : p.type === 'electric' ? 6.5 : 4;
+      let dmg = p.type === 'missile' ? 10 : (p.type === 'beam' || p.type === 'laser') ? 4.5 : p.type === 'fire' ? 12.0 : p.type === 'electric' ? 6.5 : 4;
       this.boss.hp -= dmg;
       Sound.play('boss_hit');
       if (this.gameFrame % 4 === 0) this.spawnExplosion(p.x, this.boss.y + 50, p.type === 'fire' ? '#f97316' : '#fbbf24', 1);
@@ -381,7 +381,7 @@ export class GameEngine {
               const beamWidth = isMobile ? e.radius * 2.5 : e.radius * 2;
               
               let isColliding = false;
-              if (p.type === 'beam') {
+              if (p.type === 'beam' || p.type === 'laser') {
                   // בדיקת קרן: האם האויב בטור של השחקן ומעליו
                   isColliding = Math.abs(p.x - e.x) < beamWidth && e.y < p.y;
               } else {
@@ -391,7 +391,7 @@ export class GameEngine {
               if (isColliding) {
                   hit = true; 
                   p.hasHit = true; // סימון שפגע
-                  if (p.type === 'beam') {
+                  if (p.type === 'beam' || p.type === 'laser') {
                       p.targetY = e.y; // הקרן נעצרת באויב
                       p.life = 6; // הקרן נשארת גלויה ל-6 פריימים כדי שיראו את הפגיעה
                   } else {
@@ -433,7 +433,7 @@ export class GameEngine {
       this.enemyPool.forEach(e => e.active = false);
       this.hazards = [];
       this.bossProjectiles = [];
-      this.projectilePool.forEach(p => { if (p.type !== 'beam') p.active = false; });
+      this.projectilePool.forEach(p => { if (p.type !== 'beam' && p.type !== 'laser') p.active = false; });
       if (this.shieldStrength > 0) {
           this.shieldStrength--; this.triggerShake(10); Sound.play('hit');
           this.onFeedback(this.shieldStrength === 1 ? "מגן נסדק!" : "מגן נשבר!", false);
@@ -601,7 +601,8 @@ export class GameEngine {
       }
       let primary = '#3b82f6', secondary = '#1e3a8a', cockpit = '#38bdf8', engine = '#fb7185';
       if (skin === 'skin_gold') { primary = '#fbbf24'; secondary = '#d97706'; cockpit = '#fffbeb'; engine = '#fde68a'; }
-      else if (skin === 'skin_stealth') { primary = '#1e293b'; secondary = '#020617'; cockpit = '#334155'; engine = '#ef4444'; }
+      else if (skin === 'skin_butzina') { primary = '#a855f7'; secondary = '#581c87'; cockpit = '#f3e8ff'; engine = '#d8b4fe'; }
+      
       this.ctx.save(); this.ctx.scale(scale, scale);
       const glow = 20 + Math.random() * 15; this.ctx.shadowBlur = glow; this.ctx.shadowColor = engine; this.ctx.fillStyle = engine;
       this.ctx.beginPath(); this.ctx.ellipse(-14, 32, 7, 18, 0, 0, Math.PI*2); this.ctx.fill();
@@ -634,18 +635,25 @@ export class GameEngine {
       if (!p.active) return;
       const isMobile = this.width < 600;
       this.ctx.save();
-      if(p.type === 'beam') {
+      if(p.type === 'beam' || p.type === 'laser') {
           const scale = isMobile ? 0.5 : 1.0;
           const endY = p.targetY;
-          this.ctx.shadowBlur = 80 * scale; this.ctx.shadowColor = '#fbbf24';
-          this.ctx.strokeStyle = 'rgba(251, 191, 36, 0.4)'; this.ctx.lineWidth = 70 * scale;
+          const isLaser = p.type === 'laser';
+          const mainColor = isLaser ? '#a855f7' : '#fbbf24';
+          const coreColor = isLaser ? '#f3e8ff' : '#fff';
+          
+          this.ctx.shadowBlur = 80 * scale; this.ctx.shadowColor = mainColor;
+          this.ctx.strokeStyle = isLaser ? 'rgba(168, 85, 247, 0.4)' : 'rgba(251, 191, 36, 0.4)'; this.ctx.lineWidth = 70 * scale;
           this.ctx.beginPath(); this.ctx.moveTo(p.x, p.y); this.ctx.lineTo(p.x, endY); this.ctx.stroke();
+          
           this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)'; this.ctx.lineWidth = 35 * scale;
           this.ctx.beginPath(); this.ctx.moveTo(p.x, p.y); this.ctx.lineTo(p.x, endY); this.ctx.stroke();
-          this.ctx.shadowBlur = 40 * scale; this.ctx.shadowColor = '#fff';
-          this.ctx.strokeStyle = '#fff'; this.ctx.lineWidth = 14 * scale;
+          
+          this.ctx.shadowBlur = 40 * scale; this.ctx.shadowColor = coreColor;
+          this.ctx.strokeStyle = coreColor; this.ctx.lineWidth = 14 * scale;
           this.ctx.beginPath(); this.ctx.moveTo(p.x, p.y); this.ctx.lineTo(p.x, endY); this.ctx.stroke();
-          this.ctx.fillStyle = '#fff'; this.ctx.beginPath(); this.ctx.arc(p.x, endY, 25 * scale, 0, Math.PI*2); this.ctx.fill();
+          
+          this.ctx.fillStyle = coreColor; this.ctx.beginPath(); this.ctx.arc(p.x, endY, 25 * scale, 0, Math.PI*2); this.ctx.fill();
       } else if (p.type === 'fire') {
           this.ctx.translate(p.x, p.y); 
           const baseSize = isMobile ? 18 : 35;
@@ -830,6 +838,12 @@ export class GameEngine {
 
   fire() {
       if (this.isPaused || this.playerExploding || this.isTransitioning) return;
+      
+      if (this.weaponType === 'beam' || this.weaponType === 'laser') {
+        const activeBeam = this.projectilePool.find(p => p.active && (p.type === 'beam' || p.type === 'laser'));
+        if (activeBeam) return; 
+      }
+
       Sound.play('shoot');
       const p = this.projectilePool.find(pr => !pr.active);
       if (p) {
@@ -837,7 +851,10 @@ export class GameEngine {
           p.targetY = -100; // איפוס גובה הקרן
           p.hasHit = false; // איפוס סטטוס פגיעה
           if (p.type === 'fire') { p.vy = -16; p.life = 45; }
-          if (p.type === 'beam') p.life = 30; // הגדלת זמן חיים בסיסי כדי שהיא תיראה
+          if (p.type === 'beam' || p.type === 'laser') {
+             p.targetY = -100;
+             p.life = 12; // משך ירייה קצר לקרן
+          }
           if (p.type === 'electric') p.life = 25;
           if (p.type === 'missile') { p.vy = -10; p.vx = (Math.random()-0.5)*10; }
           if (this.config.skin === 'skin_default' || this.weaponAmmo < 9000) { if (this.weaponAmmo > 0) { this.weaponAmmo--; if (this.weaponAmmo === 0) { this.onFeedback("תחמושת נגמרה", false); this.applySkinWeapon(); } } }
